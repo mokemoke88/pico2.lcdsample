@@ -16,6 +16,7 @@
 #include <hardware/pwm.h>
 #include <hardware/spi.h>
 
+#include <user/macros.h>
 #include <user/spidrv.h>
 #include <user/types.h>
 
@@ -27,8 +28,6 @@
 #define SPI_TX_PIN (3)
 #define SPI_RX_PIN (4)
 #define SPI_CSN_PIN (5)
-
-#define NOP3() asm volatile("nop \n nop \n nop")
 
 //////////////////////////////////////////////////////////////////////////////
 // typedef

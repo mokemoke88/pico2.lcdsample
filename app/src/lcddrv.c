@@ -53,6 +53,7 @@
 #include <hardware/gpio.h>
 #include <hardware/pwm.h>
 
+#include <user/macros.h>
 #include <user/lcddrv.h>
 #include <user/spidrv.h>
 #include <user/types.h>
@@ -61,9 +62,6 @@
 // defines
 //////////////////////////////////////////////////////////////////////////////
 
-#define NOP3() asm volatile("nop \n nop \n nop")
-
-#define RGB888toRGB565(R, G, B) (uint16_t)(((((G & 0b11111100) << 3) | ((B & 0b11111000) >> 3)) << 8) | ((R & 0b11111000) | ((G & 0b11111100) >> 5)))
 
 #define LCD_DC_PIN (6)
 #define LCD_RST_PIN (7)
