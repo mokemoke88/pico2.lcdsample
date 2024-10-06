@@ -2,7 +2,17 @@ cmake_minimum_required(VERSION 3.13)
 
 # Raspberry PI PICO2 Application
 
-add_executable(app src/main.c src/spidrv.c src/lcddrv.c src/canvas.c src/font.c)
+set(SRC
+src/main.c
+src/spidrv.c
+src/lcddrv.c
+src/canvas.c
+src/fontx2.c
+src/linkedlist.c
+src/utf8string.c
+src/textbox.c
+)
+add_executable(app ${SRC})
 target_link_libraries(app pico_stdlib hardware_spi hardware_dma hardware_pwm)
 target_include_directories(app PRIVATE inc)
 pico_enable_stdio_usb(app 0)

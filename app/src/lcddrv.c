@@ -53,8 +53,8 @@
 #include <hardware/gpio.h>
 #include <hardware/pwm.h>
 
-#include <user/macros.h>
 #include <user/lcddrv.h>
+#include <user/macros.h>
 #include <user/spidrv.h>
 #include <user/types.h>
 
@@ -62,16 +62,25 @@
 // defines
 //////////////////////////////////////////////////////////////////////////////
 
-
-#define LCD_DC_PIN (6)
-#define LCD_RST_PIN (7)
-#define LCD_BL_PIN (8)
+#define LCD0_DC_PIN (6)
+#define LCD0_RST_PIN (7)
+#define LCD0_BL_PIN (8)
 
 #define HANDLE_TO_CONTEXTP(p) (LCDDrvContext_t*)(p)
 
 //////////////////////////////////////////////////////////////////////////////
 // typedef
 //////////////////////////////////////////////////////////////////////////////
+
+typedef struct tagLCDDrvContext_t {
+  SPIDrvHandle_t spi;
+  uint32_t dc;
+  uint32_t rst;
+  uint32_t bl;
+  uint32_t pwm;
+
+  bool bBusy;
+} LCDDrvContext_t;
 
 //////////////////////////////////////////////////////////////////////////////
 // prototype
@@ -97,6 +106,21 @@ static UError_t LCDDrv_SetAttributes(LCDDrvContext_t* lcd);
 //////////////////////////////////////////////////////////////////////////////
 // variable
 //////////////////////////////////////////////////////////////////////////////
+
+static LCDDrvContext_t builtinContext[] = {
+    {
+        .spi = NULL,
+        .dc = LCD0_DC_PIN,
+        .rst = LCD0_RST_PIN,
+        .bl = LCD0_BL_PIN,
+        .pwm = 0u,
+        .bBusy = false,
+    },
+};
+
+static LCDDrvContext_t* builtinContextInUse[] = {
+    NULL,
+};
 
 //////////////////////////////////////////////////////////////////////////////
 // function
@@ -281,25 +305,57 @@ static UError_t LCDDrv_SetAttributes(LCDDrvContext_t* lcd) {
   return err;
 }
 
-UError_t LCDDrv_Create(LCDDrvContext_t* ctx, SPIDrvHandle_t spi) {
+UError_t LCDDrv_Open(LCDDrvHandle_t* handle, SPIDrvHandle_t spi) {
   UError_t err = uSuccess;
 
   if (uSuccess == err) {
-    if (NULL == ctx || NULL == spi) {
+    if (NULL == handle || NULL == spi) {
+      err = uFailure;
+    }
+  }
+
+  LCDDrvContext_t* ret = NULL;
+  if (uSuccess == err) {
+    for (size_t i = 0; i < (sizeof(builtinContextInUse) / sizeof(builtinContextInUse[0])); ++i) {
+      if (NULL == builtinContextInUse[i]) {
+        ret = &builtinContext[i];
+        builtinContextInUse[i] = ret;
+        break;
+      }
+    }
+    if (NULL == ret) {
       err = uFailure;
     }
   }
 
   if (uSuccess == err) {
-    ctx->spi = spi;
-    ctx->dc = LCD_DC_PIN;
-    ctx->rst = LCD_RST_PIN;
-    ctx->bl = LCD_BL_PIN;
-    ctx->pwmSlice = 0;
-    ctx->bBusy = false;
+    ret->spi = spi;
+    *handle = (LCDDrvHandle_t)ret;
   }
 
   return err;
+}
+
+void LCDDrv_Close(LCDDrvHandle_t handle) {
+  UError_t err = uSuccess;
+
+  if (uSuccess == err) {
+    if (NULL == handle) {
+      err = uFailure;
+    }
+  }
+
+  if (uSuccess == err) {
+    for (size_t i = 0; i < (sizeof(builtinContextInUse) / sizeof(builtinContextInUse[0])); ++i) {
+      if (builtinContextInUse[i] == handle) {
+        builtinContextInUse[i] = NULL;
+        builtinContext[i].bBusy = false;
+        builtinContext[i].spi = NULL;
+        // TODO: pwmの開放
+        break;
+      }
+    }
+  }
 }
 
 UError_t LCDDrv_Init(LCDDrvHandle_t handle) {
@@ -332,11 +388,15 @@ UError_t LCDDrv_Init(LCDDrvHandle_t handle) {
   if (uSuccess == err) {
     // バックライト(PWM制御)
     gpio_set_function(lcd->bl, GPIO_FUNC_PWM);
-    lcd->pwmSlice = pwm_gpio_to_slice_num(lcd->bl);
+    lcd->pwm = pwm_gpio_to_slice_num(lcd->bl);
     pwm_config pwm_config = pwm_get_default_config();
-    pwm_init(lcd->pwmSlice, &pwm_config, false);
+    pwm_init(lcd->pwm, &pwm_config, false);
     pwm_set_gpio_level(lcd->bl, 0u);  // 0xffff で初期化
-    pwm_set_enabled(lcd->pwmSlice, true);
+    pwm_set_enabled(lcd->pwm, true);
+  }
+
+  if (uSuccess == err) {
+    err = LCDDrv_InitalizeHW(lcd);
   }
 
   return err;

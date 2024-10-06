@@ -1,10 +1,12 @@
 /**
- * @file prog01/app/inc/user/macros.h
- * 共通マクロ
- **/
+ * @file prog01/app/inc/user/fontx2.h
+ * FONTX2 形式のフォントを使用した文字列出力操作
+ *
+ * @date 2024.10.13 k.shibata newly created
+ */
 
-#if !defined(USER_MACROS_H__)
-#define USER_MACROS_H__
+#if !defined(USER_FONTX2_H__)
+#define USER_FONTX2_H__
 
 //////////////////////////////////////////////////////////////////////////////
 // includes
@@ -13,21 +15,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <user/types.h>
-
 //////////////////////////////////////////////////////////////////////////////
 // defines
 //////////////////////////////////////////////////////////////////////////////
-
-/**
- * RGB888 のカラーフォーマットを RGB565に変換します
- */
-#define RGB888toRGB565(R, G, B) (uint16_t)(((((G & 0b11111100) << 3) | ((B & 0b11111000) >> 3)) << 8) | ((R & 0b11111000) | ((G & 0b11111100) >> 5)))
-
-/**
- * 3サイクル待機します
- */
-#define NOP3() asm volatile("nop \n nop \n nop")
 
 //////////////////////////////////////////////////////////////////////////////
 // typedef
@@ -37,8 +27,28 @@
 // prototype
 //////////////////////////////////////////////////////////////////////////////
 
+#ifdef __cplusplus
+extern "C" {
+#endif  // __cplusplus
+
+/**
+ * @brief code に対する フォント情報を直接取得します
+ * @param [in] code : 対象の文字コード
+ * @param [out] pw : フォント幅(dot) 出力先
+ * @param [out] ph : フォント高(dot) 出力先
+ * @param [out] pfsz : データサイズ 出力先
+ * @return フォント情報データ
+ * @retval NULL 以外 : 該当のフォントデータ
+ * @retval NULL : 該当するフォント情報がない
+ */
+const uint8_t* FontX2_GetFont(const uint16_t code, uint32_t* const pw, uint32_t* const ph, size_t* const pfsz);
+
+#ifdef __cplusplus
+}
+#endif  // __cplusplus
+
 //////////////////////////////////////////////////////////////////////////////
 // variable
 //////////////////////////////////////////////////////////////////////////////
 
-#endif  // !defined(USER_MACROS_H__)
+#endif  // !defined(USER_FONTX2_H__)

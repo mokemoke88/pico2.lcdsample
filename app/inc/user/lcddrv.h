@@ -26,15 +26,6 @@
 //////////////////////////////////////////////////////////////////////////////
 // typedef
 //////////////////////////////////////////////////////////////////////////////
-typedef struct tagLCDDrvContext_t {
-  SPIDrvHandle_t spi;
-  uint32_t dc;
-  uint32_t rst;
-  uint32_t bl;
-  uint32_t pwmSlice;
-
-  bool bBusy;
-} LCDDrvContext_t;
 
 typedef void* LCDDrvHandle_t;
 
@@ -47,13 +38,18 @@ extern "C" {
 #endif  // __cplusplus
 
 /**
- * LCDDrvContext_t を初期化します
- * @param [out] ctx : 初期化対象
- * @param [in] spi : LCD制御に使用するSPIデバイス
+ * LCD操作用のハンドルを取得します
+ * @param [out] handle : ハンドル出力先
+ * @param [in] spi : LCD操作に使用するSPIDrvハンドル
  * @return 処理結果
- * @retval SUCCESS : 処理成功
+ * @retval uSUCCESS : 処理成功
  */
-UError_t LCDDrv_Create(LCDDrvContext_t* ctx, SPIDrvHandle_t spi);
+UError_t LCDDrv_Open(LCDDrvHandle_t* handle, SPIDrvHandle_t spi);
+/**
+ * LCD操作用のハンドルを解放します
+ * @param [in] handle : 解放するハンドル
+ */
+void LCDDrv_Close(LCDDrvHandle_t handle);
 
 /**
  * @brief 使用するGPIO等, MCU側の周辺を初期化します

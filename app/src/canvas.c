@@ -26,7 +26,7 @@
 
 inline static UError_t clear(const Canvas_t* const ctx, const uint16_t c);
 
-inline static UError_t setPixel(const Canvas_t* const ctx, const size_t x, const size_t y, const uint16_t c);
+inline static UError_t setPixel(const Canvas_t* const ctx, const uint32_t x, const uint32_t y, const uint16_t c);
 
 /**
  * @brief 端点1 端点2 を結ぶ 線分を描画する.
@@ -40,7 +40,7 @@ inline static UError_t setPixel(const Canvas_t* const ctx, const size_t x, const
  * @param [in] c  : RGB565 形式の描画色
  * @return 処理結果
  */
-inline static UError_t setLine(const Canvas_t* const ctx, const size_t x1, const size_t y1, const size_t x2, const size_t y2, const uint16_t c);
+inline static UError_t setLine(const Canvas_t* const ctx, const uint32_t x1, const uint32_t y1, const uint32_t x2, const uint32_t y2, const uint16_t c);
 
 //////////////////////////////////////////////////////////////////////////////
 // variable
@@ -71,7 +71,7 @@ inline static UError_t clear(const Canvas_t* const ctx, const uint16_t c) {
   return err;
 }
 
-inline static UError_t setPixel(const Canvas_t* const ctx, const size_t x, const size_t y, const uint16_t c) {
+inline static UError_t setPixel(const Canvas_t* const ctx, const uint32_t x, const uint32_t y, const uint16_t c) {
   UError_t err = uSuccess;
 
   if (uSuccess == err) {
@@ -95,7 +95,7 @@ inline static UError_t setPixel(const Canvas_t* const ctx, const size_t x, const
   return err;
 }
 
-inline static UError_t setLine(const Canvas_t* const ctx, const size_t x1, const size_t y1, const size_t x2, const size_t y2, const uint16_t c) {
+inline static UError_t setLine(const Canvas_t* const ctx, const uint32_t x1, const uint32_t y1, const uint32_t x2, const uint32_t y2, const uint16_t c) {
   UError_t err = uSuccess;
 
   if (uSuccess == err) {
@@ -141,7 +141,7 @@ inline static UError_t setLine(const Canvas_t* const ctx, const size_t x1, const
   return err;
 }
 
-UError_t Canvas_Create(Canvas_t* ctx, size_t w, size_t h, size_t s, void* const buf) {
+UError_t Canvas_Create(Canvas_t* ctx, uint32_t w, uint32_t h, size_t s, void* const buf) {
   UError_t err = uSuccess;
 
   if (uSuccess == err) {
@@ -169,13 +169,13 @@ const void* Canvas_GetBuf(const Canvas_t* const ctx) {
 
 UError_t Canvas_Clear(const Canvas_t* const ctx, const uint16_t c) { return clear(ctx, c); }
 
-UError_t Canvas_DrawPixel(const Canvas_t* const ctx, const size_t x, const size_t y, const uint16_t c) { return setPixel(ctx, x, y, c); }
+UError_t Canvas_DrawPixel(const Canvas_t* const ctx, const uint32_t x, const uint32_t y, const uint16_t c) { return setPixel(ctx, x, y, c); }
 
-UError_t Canvas_DrawLine(const Canvas_t* const ctx, const size_t x1, const size_t y1, const size_t x2, const size_t y2, const uint16_t c) {
+UError_t Canvas_DrawLine(const Canvas_t* const ctx, const uint32_t x1, const uint32_t y1, const uint32_t x2, const uint32_t y2, const uint16_t c) {
   return setLine(ctx, x1, y1, x2, y2, c);
 }
 
-UError_t Canvas_DrawCircle(const Canvas_t* const ctx, const size_t x, const size_t y, const size_t r, const uint16_t c) {
+UError_t Canvas_DrawCircle(const Canvas_t* const ctx, const uint32_t x, const uint32_t y, const uint32_t r, const uint16_t c) {
   UError_t err = uSuccess;
 
   if (uSuccess == err) {
@@ -215,7 +215,7 @@ UError_t Canvas_DrawCircle(const Canvas_t* const ctx, const size_t x, const size
   return err;
 }
 
-UError_t Canvas_DrawFillCircle(const Canvas_t* const ctx, const size_t x, const size_t y, const size_t r, const uint16_t c) {
+UError_t Canvas_DrawFillCircle(const Canvas_t* const ctx, const uint32_t x, const uint32_t y, const uint32_t r, const uint16_t c) {
   UError_t err = uSuccess;
 
   if (uSuccess == err) {
