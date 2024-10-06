@@ -1,8 +1,10 @@
 # CMake
 
 
+repos/pico-sdk 以下に C-SDKを配置して
+
 ```sh
-cmake -DPICO_SDK_PATH=/home/hv-admin/repos/pico-sdk -DPICO_BOARD=pico2 -DPICO_PLATFORM=rp2350  ..
+cmake -DPICO_SDK_PATH=${HOME}/repos/pico-sdk -DPICO_BOARD=pico2 -DPICO_PLATFORM=rp2350  ..
 ```
 
 libpng, zlib は手動で取り込んだ方が手っ取り早そう.

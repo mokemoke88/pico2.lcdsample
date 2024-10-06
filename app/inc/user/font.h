@@ -62,6 +62,18 @@ extern "C" {
  */
 UError_t Font_Print(const char* sz, Font_DrawFontFn_t fn, void* arg);
 
+/**
+ * @brief code に対する ANKフォント情報を直接取得します
+ * @param [in] code : 対象の文字コード
+ * @param [out] pw : フォント幅(dot) 出力先
+ * @param [out] ph : フォント高(dot) 出力先
+ * @param [out] pfsz : データサイズ 出力先
+ * @return フォント情報データ
+ * @retval NULL 以外 : 該当のフォントデータ
+ * @retval NULL : 該当するフォント情報がない
+ */
+const uint8_t* Font_GetAnkFont(const uint16_t code, uint32_t* const pw, uint32_t* const ph, size_t* const pfsz);
+
 #ifdef __cplusplus
 }
 #endif  // __cplusplus

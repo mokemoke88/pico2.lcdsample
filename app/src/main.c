@@ -13,6 +13,7 @@
 #include <pico/stdlib.h>
 
 #include <user/canvas.h>
+#include <user/console.h>
 #include <user/font.h>
 #include <user/lcddrv.h>
 #include <user/macros.h>
@@ -89,6 +90,36 @@ static UError_t drawCharactor(void* arg, uint32_t x, uint32_t y, const void* fp,
   return uSuccess;
 }
 
+static UError_t consoleProces(void* arg, const LineBuffer_t* buf) {
+  // printf("arg[0x%08lx] buf[0x%08lx]\n", (uint32_t)arg, (uint32_t)buf);
+  if (NULL != arg) {
+    StringContext_t* ctx = (StringContext_t*)arg;
+    for (size_t i = 0; i < buf->bytesize; ++i) {
+      uint32_t fw, fh;
+      size_t fsz;
+      const uint8_t* fp = Font_GetAnkFont(((uint8_t*)(buf->ptr))[i], &fw, &fh, &fsz);
+      if (NULL != fp) {
+        const uint8_t* addr = fp;
+        const uint32_t posx = ctx->curX + (i * fw);
+        const uint32_t posy = ctx->curY;  // + (y * fh);
+        for (uint32_t h = 0; h < fh; ++h) {
+          uint8_t c = *addr;
+          for (uint32_t w = 0; w < fw; ++w) {
+            if ((c & 0b10000000)) {
+              Canvas_DrawPixel(ctx->canvas, posx + w, posy + h, ctx->color);
+            } else {
+            }
+            c = c << 1;
+          }  // for(w...)
+          addr++;
+        }  // for(h...)
+      }  // if(NULL != fp)
+    }  // for(size_t i...
+    ctx->curY += 8;
+  }
+  return uSuccess;
+}
+
 /**
  * @brief レンダリング処理
  * @param canvas
@@ -142,6 +173,8 @@ int main(void) {
   Canvas_Create(&frame[0], 240, 320, 240, &framebuf[0]);
   Canvas_Create(&frame[1], 240, 320, 240, &framebuf[240 * 320]);
 
+  Console_Create();
+
   SPIDrv_Init(hSpi, 25 * 1000 * 1000);
   LCDDrv_Init(hLcd);
 
@@ -170,6 +203,7 @@ int main(void) {
     Canvas_Clear(canvas, RGB888toRGB565(0x90, 0x90, 0x90));  // クリア
     Render(canvas, f);
 
+#if 0
     // 文字列描画
     {
       StringContext_t printCtx = {
@@ -184,6 +218,22 @@ int main(void) {
       sprintf(sbuf, "Frametime: %9lld us\n", difftime);
       Font_Print(sbuf, &drawCharactor, &printCtx);
     }
+#endif
+    {
+      char sbuf[1024];
+      sprintf(sbuf, "Frametime: %9lld us\n", difftime);
+      Console_StringPush(sbuf);
+      StringContext_t printCtx = {
+          .canvas = canvas,
+          .orgX = 0,
+          .orgY = 0,
+          .curX = 10,
+          .curY = 10,
+          .color = 0xffff,
+      };
+      Console_Flush(&consoleProces, &printCtx);
+    }
+
     etime = get_absolute_time();
     difftime = absolute_time_diff_us(btime, etime);
     btime = etime;

@@ -94,6 +94,11 @@ inline static const uint8_t* getFont(const uint8_t* font, const uint16_t code, u
   return NULL;
 }
 
+const uint8_t* Font_GetAnkFont(const uint16_t code, uint32_t* const pw, uint32_t* const ph, size_t* const pfsz) {
+  const uint8_t* ret = getFont(ank, code, pw, ph, pfsz);
+  return ret;
+}
+
 UError_t Font_Print(const char* sz, Font_DrawFontFn_t fn, void* arg) {
   UError_t err = uSuccess;
 
@@ -144,7 +149,7 @@ UError_t Font_Print(const char* sz, Font_DrawFontFn_t fn, void* arg) {
         }
       } else if ((0xc2 <= c) && (0xdf >= c)) {
         // UTF8 2byte
-        if (0 == *(sz + i)) {
+        if (0 == *(sz + i + 1)) {
           break;
         }
         i += 1;
@@ -158,7 +163,7 @@ UError_t Font_Print(const char* sz, Font_DrawFontFn_t fn, void* arg) {
         px += 2;
       } else if ((0xf0 <= c) && (0xf4 >= c)) {
         // UTF8 4byte
-        if ((0 == *(sz + i + 1)) || (0 == *(sz + i + 2))) {
+        if ((0 == *(sz + i + 1)) || (0 == *(sz + i + 2)) || (0 == *(sz + i + 3))) {
           break;
         }
         i += 3;

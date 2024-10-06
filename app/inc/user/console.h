@@ -1,10 +1,9 @@
 /**
- * @file prog01/app/inc/user/macros.h
- * 共通マクロ
+ * @file prog01/app/inc/user/console.h
  **/
 
-#if !defined(USER_MACROS_H__)
-#define USER_MACROS_H__
+#if !defined(USER_CONSOLE_H__)
+#define USER_CONSOLE_H__
 
 //////////////////////////////////////////////////////////////////////////////
 // includes
@@ -19,30 +18,44 @@
 // defines
 //////////////////////////////////////////////////////////////////////////////
 
-/**
- * RGB888 のカラーフォーマットを RGB565に変換します
- */
-#define RGB888toRGB565(R, G, B) (uint16_t)(((((G & 0b11111100) << 3) | ((B & 0b11111000) >> 3)) << 8) | ((R & 0b11111000) | ((G & 0b11111100) >> 5)))
-
-/**
- * 3サイクル待機します
- */
-#define NOP3() asm volatile("nop \n nop \n nop")
-
-#define LOG_PRINTF(FMT, ...) printf(FMT, ##__VA_ARGS__)
-
-#define LOG_D(FMT, ...) LOG_PRINTF("[DEBUG] %s(): " FMT "\n", __FUNCTION__, ##__VA_ARGS__)
-
 //////////////////////////////////////////////////////////////////////////////
 // typedef
 //////////////////////////////////////////////////////////////////////////////
+typedef struct tagLinkList_t LinkList_t;
+
+typedef struct tagLinkList_t {
+  LinkList_t* prev;
+  LinkList_t* next;
+} LinkList_t;
+
+typedef struct tagLineBuffer_t {
+  LinkList_t link;
+  // data
+  size_t charsize;  // キャラクタサイズ
+  size_t bytesize;  // 実データデータ長
+  void* ptr;        // 実データの先頭アドレス
+} LineBuffer_t;
+
+typedef UError_t (*ConsoleProcessFn_t)(void* arg, const LineBuffer_t* buf);
 
 //////////////////////////////////////////////////////////////////////////////
 // prototype
 //////////////////////////////////////////////////////////////////////////////
 
+#ifdef __cplusplus
+extern "C" {
+#endif  // __cplusplus
+
+UError_t Console_Create(void);
+UError_t Console_StringPush(const char* sz);
+UError_t Console_Flush(ConsoleProcessFn_t fn, void* arg);
+
+#ifdef __cplusplus
+}
+#endif  // __cplusplus
+
 //////////////////////////////////////////////////////////////////////////////
 // variable
 //////////////////////////////////////////////////////////////////////////////
 
-#endif  // !defined(USER_MACROS_H__)
+#endif  // !defined(USER_CONSOLE_H__)
