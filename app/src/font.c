@@ -40,7 +40,8 @@ inline static const uint8_t* getFont(const uint8_t* font, const uint16_t code, u
 //////////////////////////////////////////////////////////////////////////////
 // variable
 //////////////////////////////////////////////////////////////////////////////
-#include "font/4X8.h"
+// #include "font/4X8.h"
+#include "font/ILGH16XB.h"
 
 //////////////////////////////////////////////////////////////////////////////
 // function
@@ -95,11 +96,71 @@ inline static const uint8_t* getFont(const uint8_t* font, const uint16_t code, u
 }
 
 const uint8_t* Font_GetAnkFont(const uint16_t code, uint32_t* const pw, uint32_t* const ph, size_t* const pfsz) {
-  const uint8_t* ret = getFont(ank, code, pw, ph, pfsz);
+  const uint8_t* ret = getFont(ank16, code, pw, ph, pfsz);
   return ret;
 }
 
-UError_t Font_Print(const char* sz, Font_DrawFontFn_t fn, void* arg) {
+/**
+ * @brief code で指定した文字を fn関数を使用して描画します.
+ * @param [in] code : 文字コード (SJIS)
+ * @param [in] x : 描画位置x 
+ * @param [in] y : 描画位置y 
+ * @param [in] color : カラーコード 
+ * @param [out] pw : 出力フォント幅(pixel)
+ * @param [out] ph : 出力フォント幅(pixel)
+ * @param [in] fn : ピクセル描画関数 
+ * @param [in] arg : パラメータパック 
+ * @return 処理結果
+ * @retval uSuccess : 処理成功
+ * @retval uSuccess 以外 : 処理失敗
+ */
+UError_t Font_DrawChar(uint16_t code, uint32_t x, uint32_t y, uint32_t color, uint32_t* pw, uint32_t* ph, Font_DrawPixelFn_t fn, void* arg){
+  UError_t err = uSuccess;
+  if(uSuccess == err){
+    if(NULL == fn){
+      err = uFailure;
+    }
+  }
+
+  if(uSuccess == err){
+    const uint8_t* pg = NULL; // フォントデータ受け先
+    uint32_t fw = 0;
+    uint32_t fh = 0;
+    size_t fsz = 0;
+
+    if(0x7f >= code){
+      pg = getFont(ank16, code, &fw, &fh, &fsz);
+      if(NULL != pw){
+        *pw = fw;
+      }
+      if(NULL != ph){
+        *ph = fh;
+      }
+    }else{
+      ;
+    }
+
+    if(NULL != pg){
+      const size_t fbw = (fw + 7) / 8; // フォントのバイト幅
+      const uint8_t* addr = pg;
+      for(uint32_t fy = 0; fy < fh; ++fy){
+        for(uint32_t fx = 0; fx < fw; ++fx){
+          const size_t bpos = (fx / 8);
+          const size_t bshift = (fx % 8);
+          uint8_t c = *(addr + bpos) << bshift;
+          if(c & 0b10000000){
+            fn(arg, x + fx, y + fy, color);
+          }
+        }
+        addr += fbw;
+      }
+    } // if(NULL != pg...
+  }
+
+  return err;
+}
+
+UError_t Font_Print(const char* sz, uint32_t color, Font_DrawPixelFn_t fn, void* arg) {
   UError_t err = uSuccess;
 
   if (uSuccess == err) {
@@ -121,16 +182,8 @@ UError_t Font_Print(const char* sz, Font_DrawFontFn_t fn, void* arg) {
         // ANK文字
         if ((0x20 <= c) && (0x7e >= c)) {
           // printable
-          pgraph = getFont(ank, c, &w, &h, &fsz);
-          if (NULL != pgraph) {
-            err = fn(arg, px, py, pgraph, c, w, h, fsz);
-            if (uSuccess != err) {
-              break;
-            }
-          } else {
-            printf("[WARN] %s(): pgraph is null\n", __FUNCTION__);
-            printf("[WARN] ank[0x%08lx] c[%c] w[%lu] h[%lu] fsz[%lu]", (uint32_t)ank, c, w, h, fsz);
-          }
+
+          Font_DrawChar(c, px, py, color, NULL, NULL, fn, arg);
           px += 1;
         } else if (0x7f == c) {
           // del : 何もしない

@@ -1,6 +1,6 @@
 /**
  * @file prog01/app/src/console.c
- * 簡易のコンソール出力. 25行保持
+ * 簡易のコンソール出力
  */
 
 //////////////////////////////////////////////////////////////////////////////
@@ -27,23 +27,108 @@
 // prototype
 //////////////////////////////////////////////////////////////////////////////
 
+/**
+ * @brief コンソールコンテキストを生成する
+ * @param [inout] ctx : 生成するコンテキスト
+ * @param [in] rows : コンソール表示行数
+ * @param [in] rawHeight : 一行の高さ(単位: pixel)
+ * @param [in] lineBuf
+ * @param [in] blockBuf
+ * @param [in] blockSize
+ * @param [in] heapSize
+ * @return
+ */
+static UError_t console_create(ConsoleContext_t* ctx, size_t rows, size_t rowHeight, LineBuffer_t* lineBuf, void* blockBuf, size_t blockSize, size_t heapSize);
+
+/**
+ * @brief ラインバッファリストの末尾にsrcを追加します.
+ * @param [in] base : 追加対象のラインバッファリスト
+ * @param [in] src : 追加するラインバッファ
+ */
+static void console_LineBufferPush(LinkList_t* const base, LineBuffer_t* src);
+
+/**
+ * @brief ラインバッファリストの先頭を取り出します
+ * @param [in] base : 操作対象のラインバッファリスト
+ * @return 取り出したラインバッファ
+ * @retval NULL以外 : 有効なラインバッファ
+ * @retval NULL : ラインバッファリストが空
+ */
+static LineBuffer_t* console_LineBufferPop(LinkList_t* const base);
+
+/**
+ * @brief ラインバッファリスト内のノード数を返します.
+ * @param [in] base : 操作対象のラインバッファリスト
+ * @return ノード数
+ */
+static size_t console_countLineBuffer(LinkList_t* const base);
+
+/**
+ * @brief ラインバッファリストを先頭から読み出し, 操作関数fnに引き渡します
+ * @param [in] base : 操作対象
+ * @param [in] rowHeight : 行高さ
+ * @param [in] fn : ラインバッファ操作関数
+ * @param [in] arg : ラインバッファ操作関数用パラメータパック
+ * @return 処理結果
+ * @retval uSuccess : 処理成功
+ * @retval uSuccess 以外 : 処理失敗
+ */
+static UError_t console_LineBufferWalk(LinkList_t* const base, size_t rowHeight, ConsoleRowProcessFn_t fn, void* arg);
+
+/**
+ * @brief ラインバッファ未取得の場合は, ラインバッファを取得し, 2文字分の空白文字列を追加する.
+ * @param [inout] ppBuf : ラインバッファを保持先, 内部でラインバッファを取得した場合は値を更新する
+ * @param [in] freeList : ラインバッファ取得先
+ * @param [in] blockSize : ラインバッファに格納可能な最大バイト数
+ * @return
+ */
+static UError_t console_pushLineBufferZenkakuSPC(LineBuffer_t** ppBuf, LinkList_t* freeList, const size_t blockSize);
+
 //////////////////////////////////////////////////////////////////////////////
 // variable
 //////////////////////////////////////////////////////////////////////////////
 
-static uint8_t gConsoleDataHeap[50][256] = {0};
-static LineBuffer_t gConsoleLineHeap[50] = {0};
-
-static LinkList_t gConsoleLineBuffer = {
-    .next = NULL,
-    .prev = NULL,
-};
-
-static LinkList_t gConsoleFreeLineBuffers = {.next = NULL, .prev = NULL};
-
 //////////////////////////////////////////////////////////////////////////////
 // function
 //////////////////////////////////////////////////////////////////////////////
+
+static UError_t console_create(ConsoleContext_t* ctx, size_t rows, size_t rowHeight, LineBuffer_t* lineBuf, void* blockBuf, size_t blockSize, size_t heapSize) {
+  UError_t err = uSuccess;
+  if (uSuccess == err) {
+    if (NULL == ctx || NULL == lineBuf || NULL == blockBuf || 0 == rows || 0 == rowHeight || 0 == blockSize || 0 == heapSize) {
+      err = uFailure;
+    }
+  }
+
+  if (uSuccess == err) {
+    ctx->rows = rows;
+    ctx->rowHeight = rowHeight;
+    ctx->lineBuf = lineBuf;
+    ctx->blockBuf = blockBuf;
+    ctx->heapSize = heapSize;    //< ラインバッファの総数
+    ctx->blockSize = blockSize;  //< 1行に含める最大バイト数
+
+    // フリーリストの初期化
+    {
+      ctx->freeLineBlockList.next = NULL;
+      ctx->freeLineBlockList.prev = NULL;
+      for (size_t i = 0; i < ctx->heapSize; ++i) {
+        LineBuffer_t* cur = &ctx->lineBuf[i];
+        cur->ptr = ((uint8_t*)ctx->blockBuf) + (ctx->blockSize * i);
+        cur->charsize = 0u;
+        cur->bytesize = 0u;
+        console_LineBufferPush(&ctx->freeLineBlockList, cur);
+      }
+    }
+    // 有効ラインバッファリストの初期化
+    {
+      ctx->lineBlockList.next = NULL;
+      ctx->lineBlockList.prev = NULL;
+    }
+  }
+
+  return err;
+}
 
 static void console_LineBufferPush(LinkList_t* const base, LineBuffer_t* src) {
   LinkList_t* cur = base;
@@ -81,13 +166,7 @@ static size_t console_countLineBuffer(LinkList_t* const base) {
   return ret;
 }
 
-/**
- * @brief ラインバッファをスキャンする
- * @param base
- * @param fn
- * @return
- */
-static UError_t console_LineBufferWalk(LinkList_t* const base, ConsoleProcessFn_t fn, void* arg) {
+static UError_t console_LineBufferWalk(LinkList_t* const base, size_t rowHeight, ConsoleRowProcessFn_t fn, void* arg) {
   UError_t err = uSuccess;
 
   if (uSuccess == err) {
@@ -101,7 +180,7 @@ static UError_t console_LineBufferWalk(LinkList_t* const base, ConsoleProcessFn_
     //    LOG_D("cur[0x%08lx]", (uint32_t)cur);
     while (NULL != cur) {
       if (NULL != fn) {
-        err = fn(arg, cur);
+        err = fn(arg, cur, rowHeight);
       }
       if (uSuccess != err) {
         break;
@@ -113,6 +192,7 @@ static UError_t console_LineBufferWalk(LinkList_t* const base, ConsoleProcessFn_
   return err;
 }
 
+#if 0
 /**
  * @brief 内部構造を初期化する
  * @param
@@ -136,14 +216,9 @@ static UError_t console_setup(void) {
     gConsoleLineBuffer.prev = NULL;
   }
 }
+#endif
 
-/**
- * @brief ラインバッファ未取得の場合は, ラインバッファを取得し, 2文字分の空白文字列を追加する.
- * @param [inout] ppBuf : ラインバッファを保持先, 内部でラインバッファを取得した場合は値を更新する
- * @param [in] freeList : ラインバッファ取得先
- * @return
- */
-static UError_t console_pushLineBufferZenkakuSPC(LineBuffer_t** ppBuf, LinkList_t* freeList) {
+static UError_t console_pushLineBufferZenkakuSPC(LineBuffer_t** ppBuf, LinkList_t* freeList, const size_t blockSize) {
   UError_t err = uSuccess;
 
   if (uSuccess == err) {
@@ -165,40 +240,44 @@ static UError_t console_pushLineBufferZenkakuSPC(LineBuffer_t** ppBuf, LinkList_
       }
     }
     if (uSuccess == err) {
-      ((uint8_t*)(pBuf->ptr))[pBuf->bytesize] = 0x20;
-      ((uint8_t*)(pBuf->ptr))[pBuf->bytesize] = 0x20;
-      pBuf->bytesize += 2;
-      pBuf->charsize += 2;
+      if (blockSize > pBuf->bytesize) {
+        ((uint8_t*)(pBuf->ptr))[pBuf->bytesize++] = 0x20;
+        pBuf->charsize++;
+      }
+      if (blockSize > pBuf->bytesize) {
+        ((uint8_t*)(pBuf->ptr))[pBuf->bytesize++] = 0x20;
+        pBuf->charsize++;
+      }
     }
   }
   return err;
 }
 
-UError_t Console_Create(void) {
+UError_t Console_Create(ConsoleContext_t* ctx, size_t rows, size_t rowHeight, LineBuffer_t* lineBuf, void* blockBuf, size_t blockSize, size_t heapSize) {
   UError_t err = uSuccess;
 
-  return console_setup();
+  if (uSuccess == err) {
+    err = console_create(ctx, rows, rowHeight, lineBuf, blockBuf, blockSize, heapSize);
+  }
+  return err;
 }
 
-/**
- * @brief コンソールバッファに文字列リテラルを追加します.
- * @param sz
- * @return
- */
-UError_t Console_StringPush(const char* sz) {
+UError_t Console_StringPush(ConsoleHandle_t handle, const char* sz) {
   UError_t err = uSuccess;
-  // LOG_D("entry");
+
   if (uSuccess == err) {
-    if (NULL == sz) {
+    if (NULL == handle || NULL == sz) {
       err = uFailure;
     }
   }
 
-  // 追加するラインバッファを取得
-  LineBuffer_t* buf = NULL;
   if (uSuccess == err) {
-    // 文字を追いかけながら, 改行 or 終端記号を見つけたら push
+    ConsoleContext_t* ctx = (ConsoleContext_t*)handle;
 
+    // 追加するラインバッファを取得
+    LineBuffer_t* buf = NULL;
+
+    // 文字分割しながらラインバッファに追加する
     for (size_t i = 0; 0 != *(sz + i); ++i) {
       const uint8_t c = (uint8_t)(*(sz + i));
       if (0x7f >= c) {
@@ -207,7 +286,7 @@ UError_t Console_StringPush(const char* sz) {
         } else {
           // バッファが存在しない場合バッファ取得
           if (NULL == buf) {
-            buf = console_LineBufferPop(&gConsoleFreeLineBuffers);
+            buf = console_LineBufferPop(&ctx->freeLineBlockList);
             if (NULL == buf) {
               err = uFailure;
               break;
@@ -219,34 +298,46 @@ UError_t Console_StringPush(const char* sz) {
           // 文字種別で処理分岐
           if ((0x20 <= c) && (0x7e >= c)) {
             // printable
-            ((uint8_t*)(buf->ptr))[buf->bytesize] = c;
-            buf->bytesize++;
-            buf->charsize++;
-            // LOG_D("printable. done");
+            if (ctx->blockSize > buf->bytesize) {
+              ((uint8_t*)(buf->ptr))[buf->bytesize] = c;
+              buf->bytesize++;
+              buf->charsize++;
+            }
           } else if (0x09 == c) {
             // tab : 2キャラクタ進める
-            ((uint8_t*)(buf->ptr))[buf->bytesize] = 0x20;
-            ((uint8_t*)(buf->ptr))[buf->bytesize + 1] = 0x20;
-            buf->bytesize += 2;
-            buf->charsize += 2;
+            if (ctx->blockSize > buf->bytesize) {
+              ((uint8_t*)(buf->ptr))[buf->bytesize++] = 0x20;
+              buf->charsize++;
+            } else {
+              // TODO
+            }
+            if (ctx->blockSize > buf->bytesize) {
+              ((uint8_t*)(buf->ptr))[buf->bytesize++] = 0x20;
+              buf->charsize++;
+            } else {
+              // TODO
+            }
             // CR 改行
           } else if (0x10 == c) {
             // ラインバッファに投入
-            console_LineBufferPush(&gConsoleLineBuffer, buf);
-            if (25 > console_countLineBuffer(&gConsoleLineBuffer)) {
-              LineBuffer_t* c = console_LineBufferPop(&gConsoleLineBuffer);
+            console_LineBufferPush(&ctx->lineBlockList, buf);
+            if (18 > console_countLineBuffer(&ctx->lineBlockList)) {
+              LineBuffer_t* c = console_LineBufferPop(&ctx->lineBlockList);
               if (c != NULL) {
                 c->bytesize = 0;
                 c->charsize = 0;
-                console_LineBufferPush(&gConsoleFreeLineBuffers, c);
+                console_LineBufferPush(&ctx->freeLineBlockList, c);
               }
             }
             buf = NULL;
           } else {
             // 上記以外 1キャラクタ進める
-            ((uint8_t*)(buf->ptr))[buf->bytesize] = 0x20;
-            buf->bytesize++;
-            buf->charsize++;
+            if (ctx->blockSize > buf->bytesize) {
+              ((uint8_t*)(buf->ptr))[buf->bytesize++] = 0x20;
+              buf->charsize++;
+            } else {
+              // todo.
+            }
           }  // 文字種別で処理分岐
         }  // if( (0x7...))
       } else if ((0xc2 <= c) && (0xdf >= c)) {
@@ -254,7 +345,7 @@ UError_t Console_StringPush(const char* sz) {
         if (0 == *(sz + i + 1)) {
           break;
         }
-        err = console_pushLineBufferZenkakuSPC(&buf, &gConsoleFreeLineBuffers);
+        err = console_pushLineBufferZenkakuSPC(&buf, &ctx->freeLineBlockList, ctx->blockSize);
         if (uSuccess != err) {
           break;
         }
@@ -263,7 +354,7 @@ UError_t Console_StringPush(const char* sz) {
         if ((0 == *(sz + i + 1)) || (0 == *(sz + i + 2))) {
           break;
         }
-        err = console_pushLineBufferZenkakuSPC(&buf, &gConsoleFreeLineBuffers);
+        err = console_pushLineBufferZenkakuSPC(&buf, &ctx->freeLineBlockList, ctx->blockSize);
         if (uSuccess != err) {
           break;
         }
@@ -272,7 +363,7 @@ UError_t Console_StringPush(const char* sz) {
         if ((0 == *(sz + i + 1)) || (0 == *(sz + i + 2)) || (0 == *(sz + i + 3))) {
           break;
         }
-        err = console_pushLineBufferZenkakuSPC(&buf, &gConsoleFreeLineBuffers);
+        err = console_pushLineBufferZenkakuSPC(&buf, &ctx->freeLineBlockList, ctx->blockSize);
         if (uSuccess != err) {
           break;
         }
@@ -281,7 +372,7 @@ UError_t Console_StringPush(const char* sz) {
         if (0 == *(sz + i)) {
           break;
         }
-        err = console_pushLineBufferZenkakuSPC(&buf, &gConsoleFreeLineBuffers);
+        err = console_pushLineBufferZenkakuSPC(&buf, &ctx->freeLineBlockList, ctx->blockSize);
         if (uSuccess != err) {
           break;
         }
@@ -289,26 +380,35 @@ UError_t Console_StringPush(const char* sz) {
     }  // for(...
 
     if (NULL != buf) {
-      console_LineBufferPush(&gConsoleLineBuffer, buf);
+      console_LineBufferPush(&ctx->lineBlockList, buf);
       //      LOG_D("push buffer");
       // 25行以上になっている場合は, バッファを解放し, フリーリストに戻す
-      if (25 <= console_countLineBuffer(&gConsoleLineBuffer)) {
+      if (18 <= console_countLineBuffer(&ctx->lineBlockList)) {
         //        LOG_D("over 25");
-        LineBuffer_t* c = console_LineBufferPop(&gConsoleLineBuffer);
+        LineBuffer_t* c = console_LineBufferPop(&ctx->lineBlockList);
         if (c != NULL) {
           c->bytesize = 0;
           c->charsize = 0;
-          console_LineBufferPush(&gConsoleFreeLineBuffers, c);
+          console_LineBufferPush(&ctx->freeLineBlockList, c);
         }
       }
-    }
+    }  // if (NULL ...)
+
   }  // if(uSuccess ..
 
   return err;
 }
 
-UError_t Console_Flush(ConsoleProcessFn_t fn, void* arg) {
+UError_t Console_Flush(ConsoleHandle_t handle, ConsoleRowProcessFn_t fn, void* arg) {
   UError_t err = uSuccess;
-  err = console_LineBufferWalk(&gConsoleLineBuffer, fn, arg);
+  if (uSuccess == err) {
+    if (NULL == handle || NULL == fn) {
+      err = uFailure;
+    }
+  }
+  if (uSuccess == err) {
+    ConsoleContext_t* ctx = (ConsoleContext_t*)handle;
+    err = console_LineBufferWalk(&ctx->lineBlockList, ctx->rowHeight, fn, arg);
+  }
   return err;
 }
