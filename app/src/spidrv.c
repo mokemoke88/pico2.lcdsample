@@ -24,18 +24,37 @@
 // defines
 //////////////////////////////////////////////////////////////////////////////
 
-#define SPI_SCK_PIN (2)
-#define SPI_TX_PIN (3)
-#define SPI_RX_PIN (4)
-#define SPI_CSN_PIN (5)
+#define SPI0_SCK_PIN (2)
+#define SPI0_TX_PIN (3)
+#define SPI0_RX_PIN (4)
+#define SPI0_CSN_PIN (5)
 
 //////////////////////////////////////////////////////////////////////////////
 // typedef
 //////////////////////////////////////////////////////////////////////////////
 
+typedef struct tagSPIDrvAsyncContext_t {
+  uint32_t tx;
+  uint32_t rx;
+  absolute_time_t begin;
+} SPIDrvAsyncContext_t;
+
+typedef struct tagSPIDrvContext_t {
+  spi_inst_t* const hw;     //< PICO SPIハードウェア
+  uint32_t baudrate;  //< ボーレート
+  //
+  const uint32_t sck;
+  const uint32_t rx;
+  const uint32_t tx;
+  const uint32_t csn;
+  //
+  SPIDrvAsyncContext_t async;
+} SPIDrvContext_t;
+
 //////////////////////////////////////////////////////////////////////////////
 // prototype
 //////////////////////////////////////////////////////////////////////////////
+
 /**
  * @brief SPI CSN 操作
  * @param
@@ -45,6 +64,27 @@ static inline void SPIDrv_CS(const SPIDrvContext_t* ctx, uint32_t value);
 //////////////////////////////////////////////////////////////////////////////
 // variable
 //////////////////////////////////////////////////////////////////////////////
+
+static SPIDrvContext_t builtinContext[] = {
+    {
+        .hw = spi0,
+        .rx = SPI0_RX_PIN,
+        .tx = SPI0_TX_PIN,
+        .sck = SPI0_SCK_PIN,
+        .csn = SPI0_CSN_PIN,
+        .baudrate = 25 * 1000 * 1000,
+        .async =
+            {
+                .tx = 0,
+                .rx = 0,
+                .begin = 0,
+            },
+    },
+};
+
+static SPIDrvContext_t* builtinContextInUse[] = {
+    NULL,
+};
 
 //////////////////////////////////////////////////////////////////////////////
 // function
@@ -56,27 +96,7 @@ static inline void SPIDrv_CS(const SPIDrvContext_t* ctx, uint32_t value) {
   NOP3();
 }
 
-UError_t SPIDrv_Create(SPIDrvContext_t* ctx) {
-  UError_t err = uSuccess;
-
-  if (uSuccess == err) {
-    if (NULL == ctx) {
-      err = uFailure;
-    }
-  }
-
-  if (uSuccess == err) {
-    ctx->hw = spi0;
-    ctx->rx = SPI_RX_PIN;
-    ctx->tx = SPI_TX_PIN;
-    ctx->sck = SPI_SCK_PIN;
-    ctx->csn = SPI_CSN_PIN;
-  }
-
-  return err;
-}
-
-UError_t SPIDrv_Init(SPIDrvHandle_t handle, uint32_t baudrate) {
+UError_t SPIDrv_Open(SPIDrvHandle_t* handle) {
   UError_t err = uSuccess;
 
   if (uSuccess == err) {
@@ -86,8 +106,51 @@ UError_t SPIDrv_Init(SPIDrvHandle_t handle, uint32_t baudrate) {
   }
 
   if (uSuccess == err) {
-    SPIDrvContext_t* const ctx = (SPIDrvContext_t*)handle;
-    ctx->baudrate = spi_init(ctx->hw, baudrate /*30 * 1000 * 1000*/);
+    if (NULL != builtinContextInUse[0]) {
+      err = uFailure;  // already opened
+    }
+  }
+
+  if (uSuccess == err) {
+    builtinContextInUse[0] = &builtinContext[0];
+    *handle = builtinContextInUse[0];
+  }
+
+  return err;
+}
+
+void SPIDrv_Close(SPIDrvHandle_t handle) {
+  UError_t err = uSuccess;
+  SPIDrvContext_t* ctx = (SPIDrvContext_t*)handle;
+
+  if (uSuccess == err) {
+    if (NULL == ctx) {
+      err = uFailure;
+    }
+  }
+
+  if (uSuccess == err) {
+    for (size_t i = 0; i < (sizeof(builtinContextInUse) / sizeof(builtinContextInUse[0])); ++i) {
+      if (builtinContextInUse[i] == ctx) {
+        builtinContextInUse[i] = NULL;
+        break;
+      }
+    }
+  }
+}
+
+UError_t SPIDrv_Init(SPIDrvHandle_t handle, uint32_t baudrate) {
+  UError_t err = uSuccess;
+  SPIDrvContext_t* const ctx = (SPIDrvContext_t*)handle;
+
+  if (uSuccess == err) {
+    if (NULL == ctx) {
+      err = uFailure;
+    }
+  }
+
+  if (uSuccess == err) {
+    ctx->baudrate = spi_init(ctx->hw, baudrate);
     gpio_set_function(ctx->sck, GPIO_FUNC_SPI);
     gpio_set_function(ctx->rx, GPIO_FUNC_SPI);
     gpio_set_function(ctx->tx, GPIO_FUNC_SPI);

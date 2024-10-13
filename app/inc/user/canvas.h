@@ -40,19 +40,19 @@ typedef struct tagCanvas_t {
 extern "C" {
 #endif  // __cplusplus
 
-UError_t Canvas_Create(Canvas_t* ctx, size_t w, size_t h, size_t s, void* const buf);
+UError_t Canvas_Create(Canvas_t* ctx, uint32_t w, uint32_t h, size_t s, void* const buf);
 
 const void* Canvas_GetBuf(const Canvas_t* const ctx);
 
 UError_t Canvas_Clear(const Canvas_t* const ctx, const uint16_t c);
 
-UError_t Canvas_DrawPixel(const Canvas_t* const ctx, const size_t x, const size_t y, const uint16_t c);
+UError_t Canvas_DrawPixel(const Canvas_t* const ctx, const uint32_t x, const uint32_t y, const uint16_t c);
 
-UError_t Canvas_DrawLine(const Canvas_t* const ctx, const size_t x1, const size_t y1, const size_t x2, const size_t y2, const uint16_t c);
+UError_t Canvas_DrawLine(const Canvas_t* const ctx, const uint32_t x1, const uint32_t y1, const uint32_t x2, const uint32_t y2, const uint16_t c);
 
-UError_t Canvas_DrawCircle(const Canvas_t* const ctx, const size_t x, const size_t y, const size_t r, const uint16_t c);
+UError_t Canvas_DrawCircle(const Canvas_t* const ctx, const uint32_t x, const uint32_t y, const uint32_t r, const uint16_t c);
 
-UError_t Canvas_DrawFillCircle(const Canvas_t* const ctx, const size_t x, const size_t y, const size_t r, const uint16_t c);
+UError_t Canvas_DrawFillCircle(const Canvas_t* const ctx, const uint32_t x, const uint32_t y, const uint32_t r, const uint16_t c);
 
 #ifdef __cplusplus
 }

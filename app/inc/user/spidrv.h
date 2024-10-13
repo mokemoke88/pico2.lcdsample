@@ -24,24 +24,6 @@
 // typedef
 //////////////////////////////////////////////////////////////////////////////
 
-typedef struct tagSPIDrvAsyncContext_t {
-  uint32_t tx;
-  uint32_t rx;
-  absolute_time_t begin;
-} SPIDrvAsyncContext_t;
-
-typedef struct tagSPIDrvContext_t {
-  spi_inst_t* hw;     //< PICO SPIハードウェア
-  uint32_t baudrate;  //< ボーレート
-  //
-  uint32_t sck;
-  uint32_t rx;
-  uint32_t tx;
-  uint32_t csn;
-  //
-  SPIDrvAsyncContext_t async;
-} SPIDrvContext_t;
-
 typedef void* SPIDrvHandle_t;
 
 //////////////////////////////////////////////////////////////////////////////
@@ -52,11 +34,14 @@ typedef void* SPIDrvHandle_t;
 extern "C" {
 #endif  // __cplusplus
 
-UError_t SPIDrv_Create(SPIDrvContext_t* ctx);
+UError_t SPIDrv_Open(SPIDrvHandle_t* handle);
+void SPIDrv_Close(SPIDrvHandle_t handle);
+
 UError_t SPIDrv_Init(SPIDrvHandle_t handle, uint32_t baudrate);
 UError_t SPIDrv_SendByte(const SPIDrvHandle_t handle, const uint8_t data);
 UError_t SPIDrv_RecvByte(const SPIDrvHandle_t handle, uint8_t* data);
 UError_t SPIDrv_TransferByte(const SPIDrvHandle_t handle, const uint8_t tx, uint8_t* rx);
+
 /**
  * @brief 同期データ送信を行う
  * @param [in] handle : 処理対象
@@ -67,6 +52,7 @@ UError_t SPIDrv_TransferByte(const SPIDrvHandle_t handle, const uint8_t tx, uint
  * @retval uSuccess 以外 : 処理失敗
  */
 UError_t SPIDrv_SendNBytes(const SPIDrvHandle_t handle, const void* data, size_t size);
+
 /**
  * @brief 同期データ受信を行う
  * @param [in] handle : 処理対象
