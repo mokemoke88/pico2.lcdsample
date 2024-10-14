@@ -10,14 +10,18 @@
 #include <pico/binary_info.h>
 #include <pico/stdlib.h>
 
+#include <user/types.h>
+
+#include <user/lcddrv.h>
+#include <user/spidrv.h>
+#include <user/touchdrv.h>
+
 #include <user/canvas.h>
 #include <user/fontx2.h>
-#include <user/lcddrv.h>
-#include <user/macros.h>
-#include <user/spidrv.h>
 #include <user/textbox.h>
-#include <user/types.h>
 #include <user/utf8string.h>  // 文字処理
+
+#include <user/macros.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -190,6 +194,9 @@ int main(void) {
 
   printf("PICO2 LCD Controller \r\n");
 
+  TouchDrvHandle_t hTouch = NULL;
+  TouchDrv_Open(&hTouch);
+
   SPIDrvHandle_t hSpi = NULL;
   SPIDrv_Open(&hSpi);
 
@@ -215,6 +222,9 @@ int main(void) {
   // LCD輝度調整
   LCDDrv_SetBrightness(hLcd, 0x7fff);
 
+  // タッチパッド初期化
+  TouchDrv_Init(hTouch);
+
   LOG_D("Enter EventLoop");
 
   uint32_t f = 0u;  //< フレームカウンタ
@@ -235,10 +245,24 @@ int main(void) {
     Canvas_Clear(frame, RGB888toRGB565(0x90, 0x90, 0x90));  // クリア
     Render(frame, f);                                       // 描画処理
 
+    TouchDrv_UpdateCoord(hTouch);
     {
+      CST328Data_t data;
+      static uint8_t debounce = 0x00;
+      TouchDrv_GetCoord(hTouch, &data);
       char sbuf[128] = {0};
-      sprintf(sbuf, "フレーム周期: %6lld us\n", difftime);
-      Textbox_Push(hTextbox, sbuf, strlen(sbuf));
+      // sprintf(sbuf, "フレーム周期: %6lld us\n", difftime);
+      // Textbox_Push(hTextbox, sbuf, strlen(sbuf));
+      debounce = debounce << 1;
+      if (0 < data.points) {
+        debounce |= 0x01;
+        if (0b111 == (0b111 & debounce)) {
+          for (size_t i = 0; i < data.points; ++i) {
+            sprintf(sbuf, "%d: X[%3d] Y[%3d] S[%3d]", i, data.coords[i].x, data.coords[i].y, data.coords[i].strength);
+            Textbox_Push(hTextbox, sbuf, strlen(sbuf));
+          }
+        }
+      }
     }
 
     // テキストボックスの内容を描画
