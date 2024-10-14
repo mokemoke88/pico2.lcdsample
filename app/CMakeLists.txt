@@ -11,9 +11,10 @@ src/fontx2.c
 src/linkedlist.c
 src/utf8string.c
 src/textbox.c
+src/touchdrv.c
 )
 add_executable(app ${SRC})
-target_link_libraries(app pico_stdlib hardware_spi hardware_dma hardware_pwm)
+target_link_libraries(app pico_stdlib hardware_spi hardware_dma hardware_pwm hardware_i2c)
 target_include_directories(app PRIVATE inc)
 pico_enable_stdio_usb(app 0)
 pico_enable_stdio_uart(app 1)
