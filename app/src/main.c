@@ -36,6 +36,7 @@
 #define FRAMEBUF_NUM (2)
 
 #define CONSOLEHEAP_SZ (50 * 256)
+#define FRAME_CONSOLEHEAP_SZ (4 * 256)
 
 //////////////////////////////////////////////////////////////////////////////
 // typedef
@@ -51,6 +52,7 @@
 
 static uint16_t gFramebuf[FRAMEBUF_SZ * FRAMEBUF_NUM] = {0};  //< フレームバッファメモリ
 static uint8_t gConsoleHeap[CONSOLEHEAP_SZ] = {0};            //< コンソール用データ領域
+static uint8_t gFrameConsoleHeap[FRAME_CONSOLEHEAP_SZ] = {0}; //< フレーム情報表示用
 
 //////////////////////////////////////////////////////////////////////////////
 // function
@@ -212,6 +214,9 @@ int main(void) {
   TextboxHandle_t hTextbox = NULL;
   Textbox_Create(&hTextbox, gConsoleHeap, CONSOLEHEAP_SZ, 64, 18);
 
+  TextboxHandle_t hFrameTextbox = NULL;
+  Textbox_Create(&hFrameTextbox, gFrameConsoleHeap, FRAME_CONSOLEHEAP_SZ, 64, 1);
+
   // SPI初期化
   SPIDrv_Init(hSpi, 25 * 1000 * 1000);
 
@@ -242,31 +247,37 @@ int main(void) {
 
     Canvas_t* frame = (f % 2) ? &canvas[0] : &canvas[1];  // 使用するCanvas(フレームバッファ)の選択
 
+    TouchDrv_UpdateCoord(hTouch); // タッチパッド情報(入力)を更新
+
     Canvas_Clear(frame, RGB888toRGB565(0x90, 0x90, 0x90));  // クリア
     Render(frame, f);                                       // 描画処理
 
-    TouchDrv_UpdateCoord(hTouch);
     {
       CST328Data_t data;
       static uint8_t debounce = 0x00;
       TouchDrv_GetCoord(hTouch, &data);
-      char sbuf[128] = {0};
-      // sprintf(sbuf, "フレーム周期: %6lld us\n", difftime);
-      // Textbox_Push(hTextbox, sbuf, strlen(sbuf));
       debounce = debounce << 1;
       if (0 < data.points) {
         debounce |= 0x01;
         if (0b111 == (0b111 & debounce)) {
+          char sbuf[128] = {0};
           for (size_t i = 0; i < data.points; ++i) {
             sprintf(sbuf, "%d: X[%3d] Y[%3d] S[%3d]", i, data.coords[i].x, data.coords[i].y, data.coords[i].strength);
             Textbox_Push(hTextbox, sbuf, strlen(sbuf));
           }
         }
       }
+      renderTextbox(frame, hTextbox, 10, 26, RGB888toRGB565(0xf, 0xf, 0xf));
     }
 
-    // テキストボックスの内容を描画
-    renderTextbox(frame, hTextbox, 10, 10, RGB888toRGB565(0xf, 0xf, 0xf));
+    {
+      char sbuf[128] = {0};
+      sprintf(sbuf, "フレーム周期: %6lld us\n", difftime);
+      Textbox_Push(hFrameTextbox, sbuf, strlen(sbuf));
+
+      // テキストボックスの内容を描画
+      renderTextbox(frame, hFrameTextbox, 10, 10, RGB888toRGB565(0xf, 0xf, 0xf));
+    }
 
     etime = get_absolute_time();
     difftime = absolute_time_diff_us(btime, etime);
