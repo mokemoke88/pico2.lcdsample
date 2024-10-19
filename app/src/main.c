@@ -12,21 +12,22 @@
 
 #include <user/types.h>
 
-#include <user/lcddrv.h>
-#include <user/spidrv.h>
-#include <user/touchdrv.h>
+// デバイス操作
+#include <user/lcddrv.h>    // LCD
+#include <user/spidrv.h>    // SPI
+#include <user/cst328drv.h>  // タッチパッド
 
+// 部品
 #include <user/canvas.h>
 #include <user/fontx2.h>
 #include <user/textbox.h>
 #include <user/utf8string.h>  // 文字処理
 
-#include <user/macros.h>
-
 #include <stdio.h>
 #include <string.h>
 
 #include <user/log.h>
+#include <user/macros.h>
 
 //////////////////////////////////////////////////////////////////////////////
 // defines
@@ -50,9 +51,9 @@
 // variable
 //////////////////////////////////////////////////////////////////////////////
 
-static uint16_t gFramebuf[FRAMEBUF_SZ * FRAMEBUF_NUM] = {0};  //< フレームバッファメモリ
-static uint8_t gConsoleHeap[CONSOLEHEAP_SZ] = {0};            //< コンソール用データ領域
-static uint8_t gFrameConsoleHeap[FRAME_CONSOLEHEAP_SZ] = {0}; //< フレーム情報表示用
+static uint16_t gFramebuf[FRAMEBUF_SZ * FRAMEBUF_NUM] = {0};   //< フレームバッファメモリ
+static uint8_t gConsoleHeap[CONSOLEHEAP_SZ] = {0};             //< コンソール用データ領域
+static uint8_t gFrameConsoleHeap[FRAME_CONSOLEHEAP_SZ] = {0};  //< フレーム情報表示用
 
 //////////////////////////////////////////////////////////////////////////////
 // function
@@ -154,13 +155,54 @@ UError_t renderTextbox(Canvas_t const* canvas, TextboxHandle_t textbox, const ui
   return err;
 }
 
+typedef struct tagCirclePointer_t {
+  uint16_t x;
+  uint16_t y;
+  uint16_t r;
+  uint8_t red;
+  uint8_t green;
+  uint8_t blue;
+
+  bool active;
+  uint16_t frame;
+} CirclePointer_t;
+
+typedef struct tagCirclePointerEvent_t {
+  bool enable;
+  uint16_t x;
+  uint16_t y;
+} CirclePointerEvent_t;
+
+void CirclePointer_Event(CirclePointer_t* self, CirclePointerEvent_t* event) {
+  if (!self->active && event->enable) {
+    self->x = event->x;
+    self->y = event->y;
+    self->frame = 0;
+    self->r = 1;
+    self->active = true;
+  } else if (self->active) {
+    self->frame++;
+    if (16 > self->frame) {
+      self->r += 2;
+    } else {
+      self->active = false;
+    }
+  }
+}
+
+void CirclePointer_Render(CirclePointer_t* self, const Canvas_t* canvas) {
+  if (self->active) {
+    Canvas_DrawCircle(canvas, self->x, self->y, self->r, RGB888toRGB565(self->red, self->green, self->blue));
+  }
+}
+
 /**
  * @brief レンダリング処理
  * @param canvas
  * @param f
  * @return
  */
-static UError_t Render(Canvas_t const* canvas, const uint32_t f) {
+static UError_t Render(Canvas_t const* canvas, const uint32_t f, CirclePointer_t* circle) {
   UError_t err = uSuccess;
   if (NULL == canvas) {
     err = uFailure;
@@ -184,6 +226,8 @@ static UError_t Render(Canvas_t const* canvas, const uint32_t f) {
 
     // サークル描画2
     Canvas_DrawFillCircle(canvas, 200, 200, (f % 20) + 1, RGB888toRGB565(0x0f + (f % 20) * 10, 0x0f + (f % 20) * 10, 0xff));
+
+    CirclePointer_Render(circle, canvas);
   }
   return err;
 }
@@ -196,8 +240,8 @@ int main(void) {
 
   printf("PICO2 LCD Controller \r\n");
 
-  TouchDrvHandle_t hTouch = NULL;
-  TouchDrv_Open(&hTouch);
+  CST328DrvHandle_t hTouch = NULL;
+  CST328Drv_Open(&hTouch);
 
   SPIDrvHandle_t hSpi = NULL;
   SPIDrv_Open(&hSpi);
@@ -224,11 +268,15 @@ int main(void) {
   LCDDrv_Init(hLcd);
   // LCD黒でクリア
   LCDDrv_Clear(hLcd, 0u, 0u, 0u);
+
+  // タッチパッド初期化
+  CST328Drv_Init(hTouch);
+
   // LCD輝度調整
   LCDDrv_SetBrightness(hLcd, 0x7fff);
 
-  // タッチパッド初期化
-  TouchDrv_Init(hTouch);
+  // 円ポインタ
+  CirclePointer_t circleP = {.active = false, .red = 0xff, .green = 0x00, .blue = 0x00};
 
   LOG_D("Enter EventLoop");
 
@@ -247,24 +295,33 @@ int main(void) {
 
     Canvas_t* frame = (f % 2) ? &canvas[0] : &canvas[1];  // 使用するCanvas(フレームバッファ)の選択
 
-    TouchDrv_UpdateCoord(hTouch); // タッチパッド情報(入力)を更新
+    CST328Drv_UpdateCoord(hTouch);  // タッチパッド情報(入力)を更新
+
+    // CirclePointer 処理
+    {
+      CST328Data_t data;
+      CST328Drv_GetCoord(hTouch, &data);
+
+      CirclePointerEvent_t ev = {
+          .enable = (data.points > 0),
+          .x = data.coords[0].x,
+          .y = data.coords[0].y,
+      };
+      CirclePointer_Event(&circleP, &ev);
+    }
 
     Canvas_Clear(frame, RGB888toRGB565(0x90, 0x90, 0x90));  // クリア
-    Render(frame, f);                                       // 描画処理
+    Render(frame, f, &circleP);                             // 描画処理
 
     {
       CST328Data_t data;
       static uint8_t debounce = 0x00;
-      TouchDrv_GetCoord(hTouch, &data);
-      debounce = debounce << 1;
+      CST328Drv_GetCoord(hTouch, &data);
       if (0 < data.points) {
-        debounce |= 0x01;
-        if (0b111 == (0b111 & debounce)) {
-          char sbuf[128] = {0};
-          for (size_t i = 0; i < data.points; ++i) {
-            sprintf(sbuf, "%d: X[%3d] Y[%3d] S[%3d]", i, data.coords[i].x, data.coords[i].y, data.coords[i].strength);
-            Textbox_Push(hTextbox, sbuf, strlen(sbuf));
-          }
+        char sbuf[128] = {0};
+        for (size_t i = 0; i < data.points; ++i) {
+          sprintf(sbuf, "%d: X[%3d] Y[%3d] S[%3d]", i, data.coords[i].x, data.coords[i].y, data.coords[i].strength);
+          Textbox_Push(hTextbox, sbuf, strlen(sbuf));
         }
       }
       renderTextbox(frame, hTextbox, 10, 26, RGB888toRGB565(0xf, 0xf, 0xf));
