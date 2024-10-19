@@ -30,6 +30,8 @@ typedef void* CST328DrvHandle_t;
  * @brief タッチポイント情報
  */
 typedef struct tagCST328DataCoord_t {
+  uint8_t id;        //< fingerid
+  uint8_t status;    //< finger status press(0x06) or lift
   int32_t x;         //< X座標
   int32_t y;         //< Y座標
   int32_t strength;  //< 強さ

@@ -389,7 +389,7 @@ static UError_t CST328_i2c_init(void* self) {
   }
 
   if (uSuccess == err) {
-    i2c_init(bus->i2c, 100 * 1000);          // 100kHz;
+    i2c_init(bus->i2c, 400 * 1000);          // 400kHz;
     gpio_set_pulls(bus->scl, false, false);  // デバイス側でPULLUP
     gpio_set_pulls(bus->sda, false, false);  // デバイス側でPULLUP
     gpio_set_function_masked((1 << bus->sda) | (1 << bus->scl), GPIO_FUNC_I2C);
@@ -648,36 +648,20 @@ inline static UError_t CST328Drv_getPosition(CST328DrvContext_t* ctx) {
     }
   }
 
-  // 有効データ数取得コマンド発行
-  if (uSuccess == err) {
-    if (2u != CST328Drv_Write(ctx, CST328_READ_NUMBER, 2)) {
-      ctx->err[CST328_ERR_READ_NUMBER_CMD]++;
-      err = uFailure;
-    }
-  }
-
-  // 有効データ数取得
-  size_t num = 0u;
-  if (uSuccess == err) {
-    uint8_t data[1] = {0};
-    if (1u != CST328Drv_Read(ctx, data, 1)) {
-      ctx->err[CST328_ERR_READ_NUMBER]++;
-      err = uFailure;
-    } else {
-      num = 0x0f & data[0];
-    }
-  }
-
   // ポジション取得
-  uint8_t posData[27] = {0};
-  if (uSuccess == err && (0 != num && 5 >= num)) {
+  size_t num = 0u;
+  uint8_t infoData[27] = {0};
+  if (uSuccess == err) {
     if (2u != CST328Drv_Write(ctx, CST328_READ_XY, 2)) {
       ctx->err[CST328_ERR_READ_XY_CMD]++;
       err = uFailure;
     } else {
-      if (27u != CST328Drv_Read(ctx, posData, 27)) {
+      if (27u != CST328Drv_Read(ctx, infoData, 27)) {
         ctx->err[CST328_ERR_READ_XY]++;
         err = uFailure;
+      } else {
+        num = 0x0f & infoData[0x05];
+        num = (5 < num) ? 0 : num;
       }
     }
   }
@@ -695,9 +679,11 @@ inline static UError_t CST328Drv_getPosition(CST328DrvContext_t* ctx) {
     ctx->data.points = num;
     for (size_t i = 0; i < num; ++i) {
       size_t n = (i > 0) ? 2 : 0;
-      ctx->data.coords[i].x = (posData[(i * 5) + 1 + n] << 4) + ((posData[(i * 5) + 3 + n] & 0xf0) >> 4);
-      ctx->data.coords[i].y = (posData[(i * 5) + 2 + n] << 4) + (posData[(i * 5) + 3 + n] & 0x0f);
-      ctx->data.coords[i].strength = (posData[(i * 5) + 4 + n]);
+      ctx->data.coords[i].id = (0x0f & (infoData[(i * 5) + 0 + n] >> 4));
+      ctx->data.coords[i].status = (0x0f & (infoData[(i * 5) + 1 + n]));
+      ctx->data.coords[i].x = (infoData[(i * 5) + 1 + n] << 4) + ((infoData[(i * 5) + 3 + n] & 0xf0) >> 4);
+      ctx->data.coords[i].y = (infoData[(i * 5) + 2 + n] << 4) + (infoData[(i * 5) + 3 + n] & 0x0f);
+      ctx->data.coords[i].strength = (infoData[(i * 5) + 4 + n]);
     }
   } else {
     ctx->data.points = 0;
