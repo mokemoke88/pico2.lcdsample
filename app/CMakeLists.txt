@@ -11,7 +11,7 @@ src/fontx2.c
 src/linkedlist.c
 src/utf8string.c
 src/textbox.c
-src/touchdrv.c
+src/cst328drv.c
 )
 add_executable(app ${SRC})
 target_link_libraries(app pico_stdlib hardware_spi hardware_dma hardware_pwm hardware_i2c)
