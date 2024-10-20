@@ -46,6 +46,9 @@ const void* Canvas_GetBuf(const Canvas_t* const ctx);
 
 UError_t Canvas_Clear(const Canvas_t* const ctx, const uint16_t c);
 
+UError_t Canvas_Blt(const Canvas_t* const ctx, uint32_t dx, uint32_t dy, const uint16_t* src, uint32_t sx, uint32_t sy, uint32_t stride, uint32_t sw,
+                    uint32_t sh);
+
 UError_t Canvas_DrawPixel(const Canvas_t* const ctx, const uint32_t x, const uint32_t y, const uint16_t c);
 
 UError_t Canvas_DrawLine(const Canvas_t* const ctx, const uint32_t x1, const uint32_t y1, const uint32_t x2, const uint32_t y2, const uint16_t c);

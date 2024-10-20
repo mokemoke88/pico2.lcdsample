@@ -9,6 +9,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <string.h>
+
 #include <user/canvas.h>
 #include <user/types.h>
 
@@ -42,6 +44,21 @@ inline static UError_t setPixel(const Canvas_t* const ctx, const uint32_t x, con
  */
 inline static UError_t setLine(const Canvas_t* const ctx, const uint32_t x1, const uint32_t y1, const uint32_t x2, const uint32_t y2, const uint16_t c);
 
+/**
+ * @brief メモリから指定位置へデータの矩形転送を行う
+ * @param [in] ctx : 転送対象
+ * @param [in] dx : 転送先x座標
+ * @param [in] dy : 転送先y座標
+ * @param [in] src : 転送元データ
+ * @param [in] sx : 転送元x座標
+ * @param [in] sy : 転送元y座標
+ * @param [in] stride : 転送元ラインバイト数
+ * @param [in] sw : 転送元幅
+ * @param [in] sh : 転送元高さ
+ * @return 処理結果
+ */
+inline static UError_t blt(const Canvas_t* const ctx, uint32_t dx, uint32_t dy, const uint16_t* src, uint32_t sx, uint32_t sy, uint32_t stride, uint32_t sw,
+                           uint32_t sh);
 //////////////////////////////////////////////////////////////////////////////
 // variable
 //////////////////////////////////////////////////////////////////////////////
@@ -68,6 +85,45 @@ inline static UError_t clear(const Canvas_t* const ctx, const uint16_t c) {
       addr += ctx->s;
     }
   }
+  return err;
+}
+
+inline static UError_t blt(const Canvas_t* const ctx, uint32_t dx, uint32_t dy, const uint16_t* src, uint32_t sx, uint32_t sy, uint32_t stride, uint32_t sw,
+                           uint32_t sh) {
+  UError_t err = uSuccess;
+
+  if (uSuccess == err) {
+    if (NULL == ctx || NULL == ctx->buf || NULL == src) {
+      err = uFailure;
+    }
+  }
+
+  if (uSuccess == err) {
+    // 領域チェック
+    if (ctx->h <= dy || ctx->w <= dx) {
+      err = uFailure;
+    }
+  }
+
+  if (uSuccess == err) {
+    uint16_t* const base = (uint16_t*)ctx->buf;
+
+    uint16_t* daddr = base + dx + ctx->s * dy;
+
+    const uint16_t* saddr = src + sx + (sy * (stride >> 1));
+
+    const size_t w = (ctx->w - dx) > sw ? sw : (ctx->w - dx);
+    const size_t h = (ctx->h - dy) > sh ? sh : (ctx->h - dy);
+
+    if (0 < w) {
+      for (size_t y = 0; y < h; ++y) {
+        memcpy(daddr, saddr, sizeof(uint16_t) * w);
+        daddr += ctx->s;
+        saddr += (stride >> 1);
+      }
+    }
+  }
+
   return err;
 }
 
@@ -168,6 +224,11 @@ const void* Canvas_GetBuf(const Canvas_t* const ctx) {
 }
 
 UError_t Canvas_Clear(const Canvas_t* const ctx, const uint16_t c) { return clear(ctx, c); }
+
+UError_t Canvas_Blt(const Canvas_t* const ctx, uint32_t dx, uint32_t dy, const uint16_t* src, uint32_t sx, uint32_t sy, uint32_t stride, uint32_t sw,
+                    uint32_t sh) {
+  return blt(ctx, dx, dy, src, sx, sy, stride, sw, sh);
+}
 
 UError_t Canvas_DrawPixel(const Canvas_t* const ctx, const uint32_t x, const uint32_t y, const uint16_t c) { return setPixel(ctx, x, y, c); }
 
