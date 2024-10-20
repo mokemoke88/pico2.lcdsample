@@ -389,9 +389,22 @@ UError_t LCDDrv_Init(LCDDrvHandle_t handle) {
     // バックライト(PWM制御)
     gpio_set_function(lcd->bl, GPIO_FUNC_PWM);
     lcd->pwm = pwm_gpio_to_slice_num(lcd->bl);
+    uint ch = pwm_gpio_to_channel(lcd->bl);
     pwm_config pwm_config = pwm_get_default_config();
     pwm_init(lcd->pwm, &pwm_config, false);
-    pwm_set_gpio_level(lcd->bl, 0u);  // 0xffff で初期化
+    // note. T = ( (wrap + 1) * clkdiv ) / sysclk[125,000,000]
+    // f = sysclk[125,000,000] / ( (wrap[255] + 1) * clkdiv )
+    //   48,000 = 125,000,000 / ( 256 * clkdiv )
+    //   48,000 * 256 = 125,000,000 / clkdiv
+    // clkdiv = 125,000,000 / 48,000 * 256
+    //
+    // 10.17252604166667 = integer = 10u,
+    // fract : 0.1725260... =  (1 * x) / 16
+    //     0.1725260... * 16 = 2.760... = 3
+    // 48KHz 近辺を狙う
+    pwm_set_clkdiv_int_frac(lcd->pwm, 10, 3);
+    pwm_set_wrap(lcd->pwm, 255u);  // 255u 
+    pwm_set_gpio_level(lcd->bl, 0u);  // 初期値:0　0 - 255 の範囲で設定
     pwm_set_enabled(lcd->pwm, true);
   }
 
@@ -505,7 +518,7 @@ UError_t LCDDrv_Clear(LCDDrvHandle_t handle, const uint8_t r, const uint8_t g, c
   return err;
 }
 
-UError_t LCDDrv_SetBrightness(LCDDrvHandle_t handle, uint16_t b) {
+UError_t LCDDrv_SetBrightness(LCDDrvHandle_t handle, uint8_t b) {
   UError_t err = uSuccess;
 
   if (uSuccess == err) {
