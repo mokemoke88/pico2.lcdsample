@@ -53,7 +53,7 @@ void LCDDrv_Close(LCDDrvHandle_t handle);
 
 /**
  * @brief 使用するGPIO等, MCU側の周辺を初期化します
- * @param [in] lcd : 操作対象
+ * @param [in] handle : 操作対象
  * @return 処理結果
  * @retval SUCCESS : 処理成功
  */
@@ -61,7 +61,7 @@ UError_t LCDDrv_Init(LCDDrvHandle_t handle);
 
 /**
  * @brief LCDハードウェア(パネル側)を初期化します
- * @param [in] lcd : 操作対象
+ * @param [in] handle : 操作対象
  * @return 処理結果
  * @retval SUCCESS : 処理成功
  */
@@ -69,7 +69,7 @@ UError_t LCDDrv_InitalizeHW(LCDDrvHandle_t handle);
 
 /**
  * @brief データ転送を行う際の描画範囲を指定します.
- * @param [in] lcd : 操作対象
+ * @param [in] handle : 操作対象
  * @param [in] x : x位置
  * @param [in] y : y位置
  * @param [in] width : 高さ
@@ -81,7 +81,7 @@ UError_t LCDDrv_SetWindow(LCDDrvHandle_t handle, const uint16_t x, const uint16_
 
 /**
  * @brief 指定した色で画面を塗りつぶします.
- * @param [in] lcd : 操作対象
+ * @param [in] handle : 操作対象
  * @param [in] r : 赤
  * @param [in] g : 緑
  * @param [in] b : 青
@@ -90,8 +90,27 @@ UError_t LCDDrv_SetWindow(LCDDrvHandle_t handle, const uint16_t x, const uint16_
  */
 UError_t LCDDrv_Clear(LCDDrvHandle_t handle, const uint8_t r, const uint8_t g, const uint8_t b);
 
-UError_t LCDDrv_SetBrightness(LCDDrvHandle_t handle, uint16_t b);
+/**
+ * @brief バックライトの輝度を設定する.
+ * @param [in] handle : 操作対象
+ * @param [in] b : 輝度 0 - 255
+ * @return 処理結果
+ * @retval SUCCESS : 処理成功
+ */
+UError_t LCDDrv_SetBrightness(LCDDrvHandle_t handle, uint8_t b);
 
+/**
+ * @brief 前回の画像データ転送完了を待って, LCDに画像データを転送する. 
+ * @note 240 x 320 @SPI 25MHz で, 60ms 程度の転送時間 = 15fps程度
+ * @param [in] handle : 操作対象
+ * @param [in] frame : 転送元データ
+ * @param [in] x : 転送先x座標 単位:pixel (0-239)
+ * @param [in] y : 転送先y座標 単位:pixel (0-319)
+ * @param [in] w : 転送幅 単位:pixel (1-240)
+ * @param [in] h : 転送幅 単位:pixel (1-320)
+ * @return 処理結果
+ * @retval SUCCESS : 処理成功
+ */
 UError_t LCDDrv_SwapBuff(LCDDrvHandle_t handle, const void* frame, uint16_t x, uint16_t y, uint16_t w, uint16_t h);
 
 #ifdef __cplusplus

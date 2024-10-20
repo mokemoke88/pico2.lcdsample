@@ -1,5 +1,8 @@
 /**
  * @file src/main.c
+ *
+ * 制作した部品の動作確認サンプル
+ *
  * @date 2024.09.23 kshibata@seekers.jp
  */
 
@@ -13,14 +16,14 @@
 #include <user/types.h>
 
 // デバイス操作
-#include <user/lcddrv.h>    // LCD
-#include <user/spidrv.h>    // SPI
 #include <user/cst328drv.h>  // タッチパッド
+#include <user/lcddrv.h>     // LCD
+#include <user/spidrv.h>     // SPI
 
 // 部品
-#include <user/canvas.h>
-#include <user/fontx2.h>
-#include <user/textbox.h>
+#include <user/canvas.h>      // canvas
+#include <user/fontx2.h>      // fontx2
+#include <user/textbox.h>     // textbox
 #include <user/utf8string.h>  // 文字処理
 
 #include <stdio.h>
@@ -50,6 +53,8 @@
 //////////////////////////////////////////////////////////////////////////////
 // variable
 //////////////////////////////////////////////////////////////////////////////
+
+#include "resources/wallpaper.h"
 
 static uint16_t gFramebuf[FRAMEBUF_SZ * FRAMEBUF_NUM] = {0};   //< フレームバッファメモリ
 static uint8_t gConsoleHeap[CONSOLEHEAP_SZ] = {0};             //< コンソール用データ領域
@@ -197,6 +202,65 @@ void CirclePointer_Render(CirclePointer_t* self, const Canvas_t* canvas) {
 }
 
 /**
+ * @brief GUI部品 スライダー
+ * 入力を受けて指示位置を変更する
+ */
+typedef struct tagSlider_t {
+  uint16_t x;
+  uint16_t y;
+  uint16_t w;
+  uint16_t h;
+  uint8_t pos;
+} Slider_t;
+
+void Slider_Event(Slider_t* self, uint16_t absX, uint16_t absY) {
+  // if(self->x > absX){
+  //   return;
+  // }
+
+  if (self->y > absY) {
+    return;
+  }
+
+  // if((self->x + self->w) < absX){
+  //   return;
+  // }
+
+  if ((self->y + self->h) < absY) {
+    return;
+  }
+
+  // 垂直スライダーとする
+  self->pos = ((absY - self->y) << 7) / self->h;
+}
+
+uint8_t Slider_GetPosition(Slider_t* self) {
+  if (NULL == self) {
+    return 0u;
+  }
+  return self->pos;
+}
+
+void Slider_Render(Slider_t* self, const Canvas_t* canvas) {
+  if (NULL == self) {
+    return;
+  }
+
+  uint32_t y = self->y + ((self->pos * self->h) >> 7);
+
+  // ガイド表示
+  Canvas_DrawLine(canvas, self->x, self->y, self->x, self->y + self->h, RGB888toRGB565(0, 0, 0xff));
+  Canvas_DrawLine(canvas, self->x, self->y, self->x + self->w, self->y, RGB888toRGB565(0, 0, 0xff));
+  Canvas_DrawLine(canvas, self->x + self->w, self->y, self->x + self->w, self->y + self->h, RGB888toRGB565(0, 0, 0xff));
+  Canvas_DrawLine(canvas, self->x, self->y + self->h, self->x + self->w, self->y + self->h, RGB888toRGB565(0, 0, 0xff));
+
+  Canvas_DrawFillCircle(canvas, self->x + (self->w / 2), y, 8, RGB888toRGB565(0xff, 0, 0));
+}
+
+// スライダー
+static Slider_t sliderP = {.x = 240 - 16 - 8, .y = 32, .w = 16, .h = 320 - 64, .pos = 127};
+
+/**
  * @brief レンダリング処理
  * @param canvas
  * @param f
@@ -209,6 +273,7 @@ static UError_t Render(Canvas_t const* canvas, const uint32_t f, CirclePointer_t
   }
   if (uSuccess == err) {
     // 罫線描画
+#if 0
     Canvas_DrawLine(canvas, 0, 0, 239, 319, RGB888toRGB565(0xff, 0, 0));
     Canvas_DrawLine(canvas, 239, 0, 0, 319, RGB888toRGB565(0xff, 0, 0));
 
@@ -226,8 +291,10 @@ static UError_t Render(Canvas_t const* canvas, const uint32_t f, CirclePointer_t
 
     // サークル描画2
     Canvas_DrawFillCircle(canvas, 200, 200, (f % 20) + 1, RGB888toRGB565(0x0f + (f % 20) * 10, 0x0f + (f % 20) * 10, 0xff));
+#endif
 
     CirclePointer_Render(circle, canvas);
+    Slider_Render(&sliderP, canvas);
   }
   return err;
 }
@@ -256,10 +323,10 @@ int main(void) {
 
   // コンソール表現に使用するTextbox インスタンス生成
   TextboxHandle_t hTextbox = NULL;
-  Textbox_Create(&hTextbox, gConsoleHeap, CONSOLEHEAP_SZ, 64, 18);
+  Textbox_Create(&hTextbox, gConsoleHeap, CONSOLEHEAP_SZ, 64, 17);
 
   TextboxHandle_t hFrameTextbox = NULL;
-  Textbox_Create(&hFrameTextbox, gFrameConsoleHeap, FRAME_CONSOLEHEAP_SZ, 64, 1);
+  Textbox_Create(&hFrameTextbox, gFrameConsoleHeap, FRAME_CONSOLEHEAP_SZ, 64, 2);
 
   // SPI初期化
   SPIDrv_Init(hSpi, 25 * 1000 * 1000);
@@ -273,7 +340,7 @@ int main(void) {
   CST328Drv_Init(hTouch);
 
   // LCD輝度調整
-  LCDDrv_SetBrightness(hLcd, 0x7fff);
+  LCDDrv_SetBrightness(hLcd, 0xff);
 
   // 円ポインタ
   CirclePointer_t circleP = {.active = false, .red = 0xff, .green = 0x00, .blue = 0x00};
@@ -282,63 +349,85 @@ int main(void) {
 
   uint32_t f = 0u;  //< フレームカウンタ
 
-  absolute_time_t btime = get_absolute_time();  //< フレーム更新間隔計測用
-  absolute_time_t etime = get_absolute_time();  //< フレーム更新間隔計測用
-  absolute_time_t difftime = 0;                 //< フレーム更新間隔計測用
+  // フレーム更新間隔計測用
+  absolute_time_t btime = get_absolute_time();                     //< フレーム更新間隔計測用
+  absolute_time_t etime = btime;                                   //< フレーム更新間隔計測用
+  absolute_time_t difftime = absolute_time_diff_us(btime, etime);  //< フレーム更新間隔計測用
+
+  // フレーム処理時間計測用
+  absolute_time_t proc_difftime = 0;
 
   while (true) {
-    // absolute_time_t b = get_absolute_time();
-    // LCDDrv_SetBrightness(hLcd, bright++);
-    // absolute_time_t e = get_absolute_time();
-    // printf("LCDDrv_Clear():%lld %lld %lld\n", b, e, absolute_time_diff_us(b,
-    // e));
-
+    absolute_time_t proc_btime = get_absolute_time();     // フレーム所要時間計時
     Canvas_t* frame = (f % 2) ? &canvas[0] : &canvas[1];  // 使用するCanvas(フレームバッファ)の選択
 
     CST328Drv_UpdateCoord(hTouch);  // タッチパッド情報(入力)を更新
 
-    // CirclePointer 処理
+    // タッチパッド情報を使用した処理
     {
       CST328Data_t data;
       CST328Drv_GetCoord(hTouch, &data);
 
+      // サークルポインタ処理
       CirclePointerEvent_t ev = {
           .enable = (data.points > 0),
           .x = data.coords[0].x,
           .y = data.coords[0].y,
       };
       CirclePointer_Event(&circleP, &ev);
+
+      // スライダー処理
+      if (data.points > 0) {
+        Slider_Event(&sliderP, data.coords[0].x, data.coords[0].y);
+      }
+      // スライダの位置情報に合わせてバックライド輝度を更新
+      uint8_t b = Slider_GetPosition(&sliderP); // 0 - 127 (0x0 - 0x7f) で値を返す
+      LCDDrv_SetBrightness(hLcd, ((uint32_t)0xff * b) >> 7);
     }
 
-    Canvas_Clear(frame, RGB888toRGB565(0x90, 0x90, 0x90));  // クリア
-    Render(frame, f, &circleP);                             // 描画処理
+    // Canvas_Clear(frame, RGB888toRGB565(0x90, 0x90, 0x90));  // クリア = 全画面書き換え 所要時間:8ms程度
+    Canvas_Blt(frame, 0, 0, (const uint16_t*)&wallpaper[12], 0, 0, 480, 240, 320);  // 壁紙で塗りつぶし 所要時間:8ms程度
+    //{
+    //  static size_t i = 0;
+    //  Canvas_Blt(frame, (i % 10) * 24, (i / 10) * 32, (const uint16_t*)&wallpaper[12], (i % 10) * 24, (i / 10) * 32, 480, 24, 32);
+    //  ++i;
+    //  i %= 100;
+    //}
+
+    Render(frame, f, &circleP);  // 描画処理
 
     {
+      // タッチ情報を描画
       CST328Data_t data;
       static uint8_t debounce = 0x00;
-      CST328Drv_GetCoord(hTouch, &data);
+      (void)CST328Drv_GetCoord(hTouch, &data);
       if (0 < data.points) {
         char sbuf[128] = {0};
         for (size_t i = 0; i < data.points; ++i) {
-          sprintf(sbuf, "%d: X[%3d] Y[%3d] S[%3d]", i, data.coords[i].x, data.coords[i].y, data.coords[i].strength);
+          sprintf(sbuf, "%d:I[%1d]X[%3d]Y[%3d]S[%3d]P[%1x]", i, data.coords[i].id, data.coords[i].x, data.coords[i].y, data.coords[i].strength,
+                  data.coords[i].status);
           Textbox_Push(hTextbox, sbuf, strlen(sbuf));
         }
       }
-      renderTextbox(frame, hTextbox, 10, 26, RGB888toRGB565(0xf, 0xf, 0xf));
+      renderTextbox(frame, hTextbox, 10, 10 + 32, RGB888toRGB565(0xf, 0xf, 0xf));
     }
 
+    // diag 表示
     {
       char sbuf[128] = {0};
       sprintf(sbuf, "フレーム周期: %6lld us\n", difftime);
       Textbox_Push(hFrameTextbox, sbuf, strlen(sbuf));
-
+      sprintf(sbuf, "フレーム処理: %6lld us\n", proc_difftime);
+      Textbox_Push(hFrameTextbox, sbuf, strlen(sbuf));
       // テキストボックスの内容を描画
       renderTextbox(frame, hFrameTextbox, 10, 10, RGB888toRGB565(0xf, 0xf, 0xf));
     }
 
     etime = get_absolute_time();
     difftime = absolute_time_diff_us(btime, etime);
+    proc_difftime = absolute_time_diff_us(proc_btime, etime);
     btime = etime;
+
     LCDDrv_SwapBuff(hLcd, Canvas_GetBuf(frame), 0, 0, 240, 320);
     f++;
   }
