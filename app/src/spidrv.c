@@ -20,6 +20,8 @@
 #include <user/spidrv.h>
 #include <user/types.h>
 
+#include <pico/binary_info.h>
+
 //////////////////////////////////////////////////////////////////////////////
 // defines
 //////////////////////////////////////////////////////////////////////////////
@@ -28,6 +30,11 @@
 #define SPI0_TX_PIN (3)
 #define SPI0_RX_PIN (4)
 #define SPI0_CSN_PIN (5)
+
+bi_decl(bi_1pin_with_name(SPI0_SCK_PIN, "SPI0_SCK_PIN"));
+bi_decl(bi_1pin_with_name(SPI0_TX_PIN, "SPI0_TX_PIN"));
+bi_decl(bi_1pin_with_name(SPI0_RX_PIN, "SPI0_RX_PIN"));
+bi_decl(bi_1pin_with_name(SPI0_CSN_PIN, "SPI0_CSN_PIN"));
 
 //////////////////////////////////////////////////////////////////////////////
 // typedef
@@ -40,8 +47,8 @@ typedef struct tagSPIDrvAsyncContext_t {
 } SPIDrvAsyncContext_t;
 
 typedef struct tagSPIDrvContext_t {
-  spi_inst_t* const hw;     //< PICO SPIハードウェア
-  uint32_t baudrate;  //< ボーレート
+  spi_inst_t* const hw;  //< PICO SPIハードウェア
+  uint32_t baudrate;     //< ボーレート
   //
   const uint32_t sck;
   const uint32_t rx;
