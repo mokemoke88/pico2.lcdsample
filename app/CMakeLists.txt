@@ -12,6 +12,7 @@ src/linkedlist.c
 src/utf8string.c
 src/textbox.c
 src/cst328drv.c
+src/pwmaudiodrv.c
 )
 add_executable(app ${SRC})
 target_link_libraries(app pico_stdlib hardware_spi hardware_dma hardware_pwm hardware_i2c)
