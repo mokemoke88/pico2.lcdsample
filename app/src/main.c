@@ -16,9 +16,10 @@
 #include <user/types.h>
 
 // デバイス操作
-#include <user/cst328drv.h>  // タッチパッド
-#include <user/lcddrv.h>     // LCD
-#include <user/spidrv.h>     // SPI
+#include <user/cst328drv.h>    // タッチパッド
+#include <user/lcddrv.h>       // LCD
+#include <user/pwmaudiodrv.h>  // PWM Audio
+#include <user/spidrv.h>       // SPI
 
 // 部品
 #include <user/canvas.h>      // canvas
@@ -54,7 +55,7 @@
 // variable
 //////////////////////////////////////////////////////////////////////////////
 
-#include "resources/wallpaper.h"
+#include "resources/wallpaper.h"  // 背景画像データ
 
 static uint16_t gFramebuf[FRAMEBUF_SZ * FRAMEBUF_NUM] = {0};   //< フレームバッファメモリ
 static uint8_t gConsoleHeap[CONSOLEHEAP_SZ] = {0};             //< コンソール用データ領域
@@ -258,7 +259,7 @@ void Slider_Render(Slider_t* self, const Canvas_t* canvas) {
 }
 
 // スライダー
-static Slider_t sliderP = {.x = 240 - 16 - 8, .y = 32, .w = 16, .h = 320 - 64, .pos = 127};
+static Slider_t sliderP = {.x = 240 - 16 - 16, .y = 32, .w = 16, .h = 320 - 32 - 32, .pos = 127};
 
 /**
  * @brief レンダリング処理
@@ -273,6 +274,7 @@ static UError_t Render(Canvas_t const* canvas, const uint32_t f, CirclePointer_t
   }
   if (uSuccess == err) {
     // 罫線描画
+
 #if 0
     Canvas_DrawLine(canvas, 0, 0, 239, 319, RGB888toRGB565(0xff, 0, 0));
     Canvas_DrawLine(canvas, 239, 0, 0, 319, RGB888toRGB565(0xff, 0, 0));
@@ -298,6 +300,8 @@ static UError_t Render(Canvas_t const* canvas, const uint32_t f, CirclePointer_t
   }
   return err;
 }
+
+uint8_t audiodata[441 * 6] = {0};
 
 /**
  * エントリポイント
@@ -345,6 +349,19 @@ int main(void) {
   // 円ポインタ
   CirclePointer_t circleP = {.active = false, .red = 0xff, .green = 0x00, .blue = 0x00};
 
+  // サンプルデータを初期化(全部127に)
+  memset(audiodata, 127u, sizeof(audiodata) / sizeof(audiodata[0]));
+
+  AudioDrvHandle_t hAudio = NULL;
+  if (uSuccess != AudioDrv_Open(&hAudio)) {
+    printf("[ERROR] AudioDrv_Open() failure\r\n");
+    while (1);
+  }
+  if (uSuccess != AudioDrv_Start(hAudio)) {
+    printf("[ERROR] AudioDrv_Start() failure\r\n");
+    while (1);
+  }
+
   LOG_D("Enter EventLoop");
 
   uint32_t f = 0u;  //< フレームカウンタ
@@ -381,7 +398,7 @@ int main(void) {
         Slider_Event(&sliderP, data.coords[0].x, data.coords[0].y);
       }
       // スライダの位置情報に合わせてバックライド輝度を更新
-      uint8_t b = Slider_GetPosition(&sliderP); // 0 - 127 (0x0 - 0x7f) で値を返す
+      uint8_t b = Slider_GetPosition(&sliderP);  // 0 - 127 (0x0 - 0x7f) で値を返す
       LCDDrv_SetBrightness(hLcd, ((uint32_t)0xff * b) >> 7);
     }
 
@@ -393,8 +410,12 @@ int main(void) {
     //  ++i;
     //  i %= 100;
     //}
-
     Render(frame, f, &circleP);  // 描画処理
+
+    {
+      // オーディオ再生
+      AudioDrv_WriteSample(hAudio, audiodata, sizeof(audiodata) / sizeof(audiodata[0]));
+    }
 
     {
       // タッチ情報を描画

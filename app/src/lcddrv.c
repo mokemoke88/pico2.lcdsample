@@ -58,15 +58,20 @@
 #include <user/spidrv.h>
 #include <user/types.h>
 
+#include <pico/binary_info.h>
+
 //////////////////////////////////////////////////////////////////////////////
 // defines
 //////////////////////////////////////////////////////////////////////////////
 
-#define LCD0_DC_PIN (6)
-#define LCD0_RST_PIN (7)
-#define LCD0_BL_PIN (8)
+#define LCD0_DC_PIN (6)   // GP6 - pin9
+#define LCD0_RST_PIN (7)  // GP7 - pin10
+#define LCD0_BL_PIN (8)   // GP8 - PWM4[A] - pin11
 
-#define HANDLE_TO_CONTEXTP(p) (LCDDrvContext_t*)(p)
+// TFTコントローラ制御ピン for pico tool
+bi_decl(bi_1pin_with_name(LCD0_DC_PIN, "LCD0 D/C"));
+bi_decl(bi_1pin_with_name(LCD0_RST_PIN, "LCD0 RSTN"));
+bi_decl(bi_1pin_with_name(LCD0_BL_PIN, "LCD0 BL[PWM]"));
 
 //////////////////////////////////////////////////////////////////////////////
 // typedef
@@ -360,16 +365,13 @@ void LCDDrv_Close(LCDDrvHandle_t handle) {
 
 UError_t LCDDrv_Init(LCDDrvHandle_t handle) {
   UError_t err = uSuccess;
+  LCDDrvContext_t* const lcd = (LCDDrvContext_t*)handle;
 
   if (uSuccess == err) {
-    if (NULL == handle) {
+    if (NULL == lcd) {
       err = uFailure;
     }
   }
-
-  LCDDrvContext_t* const lcd = HANDLE_TO_CONTEXTP(handle);
-
-  // TFTコントローラ制御ピン
 
   // D/C 制御
   if (uSuccess == err) {
@@ -393,19 +395,29 @@ UError_t LCDDrv_Init(LCDDrvHandle_t handle) {
     pwm_config pwm_config = pwm_get_default_config();
     pwm_init(lcd->pwm, &pwm_config, false);
     // note. T = ( (wrap + 1) * clkdiv ) / sysclk[125,000,000]
-    // f = sysclk[125,000,000] / ( (wrap[255] + 1) * clkdiv )
-    //   48,000 = 125,000,000 / ( 256 * clkdiv )
-    //   48,000 * 256 = 125,000,000 / clkdiv
-    // clkdiv = 125,000,000 / 48,000 * 256
-    //
-    // 10.17252604166667 = integer = 10u,
-    // fract : 0.1725260... =  (1 * x) / 16
-    //     0.1725260... * 16 = 2.760... = 3
     // 48KHz 近辺を狙う
-    pwm_set_clkdiv_int_frac(lcd->pwm, 10, 3);
-    pwm_set_wrap(lcd->pwm, 255u);  // 255u 
+    // f = sysclk[150,000,000] / ( (wrap[255] + 1) * clkdiv )
+    //   48,000 = 150,000,000 / ( 256 * clkdiv )
+    //   48,000 * 256 = 150,000,000 / clkdiv
+    // clkdiv = 150,000,000 / 48,000 * 256
+    //
+    // 12.20703125 = integer = 12u,
+    // fract : 0.20703125... =  (1 * x) / 16
+    //     0.20703125... * 16 = 3.3125 = 3
+    pwm_set_clkdiv_int_frac(lcd->pwm, 12, 3);
+    pwm_set_wrap(lcd->pwm, 255u);     // 255u
     pwm_set_gpio_level(lcd->bl, 0u);  // 初期値:0　0 - 255 の範囲で設定
     pwm_set_enabled(lcd->pwm, true);
+
+    // 44.1KHz 近辺を狙う
+    // 44,100 = sysclk[150,000,000] / ( (wrap[255] + 1) * clkdiv )
+    //   44,100 = 150,000,000 / ( 256 * clkdiv )
+    //   44,100 * 256 = 150,000,000 / clkdiv
+    // clkdiv = 150,000,000 / 44,100 * 256
+    //
+    // 13.28656462585034 = integer = 13u
+    // fract : 0.28656462585034 =  (1 * x) / 16
+    //     0.28656462585034 * 16 = 4.5850281360544 = 4 or 5
   }
 
   if (uSuccess == err) {
@@ -417,14 +429,13 @@ UError_t LCDDrv_Init(LCDDrvHandle_t handle) {
 
 UError_t LCDDrv_InitalizeHW(LCDDrvHandle_t handle) {
   UError_t err = uSuccess;
+  LCDDrvContext_t* const lcd = (LCDDrvContext_t*)handle;
 
   if (uSuccess == err) {
-    if (NULL == handle) {
+    if (NULL == lcd) {
       err = uFailure;
     }
   }
-
-  LCDDrvContext_t* const lcd = HANDLE_TO_CONTEXTP(handle);
 
   if (uSuccess == err) {
     LCDDrv_HWReset(lcd);
@@ -439,14 +450,13 @@ UError_t LCDDrv_InitalizeHW(LCDDrvHandle_t handle) {
 
 UError_t LCDDrv_SetWindow(LCDDrvHandle_t handle, const uint16_t x, const uint16_t y, const uint16_t width, const uint16_t height) {
   UError_t err = uSuccess;
+  LCDDrvContext_t* const lcd = (LCDDrvContext_t*)handle;
 
   if (uSuccess == err) {
-    if (NULL == handle) {
+    if (NULL == lcd) {
       err = uFailure;
     }
   }
-
-  LCDDrvContext_t* const lcd = HANDLE_TO_CONTEXTP(handle);
 
   if (uSuccess == err) {
     if ((320 <= y) || (240 <= x) || (320 < (y + height)) || (240 < (x + width))) {
@@ -489,7 +499,7 @@ UError_t LCDDrv_Clear(LCDDrvHandle_t handle, const uint8_t r, const uint8_t g, c
     }
   }
 
-  LCDDrvContext_t* const lcd = HANDLE_TO_CONTEXTP(handle);
+  LCDDrvContext_t* const lcd = (LCDDrvContext_t*)handle;
 
   if (uSuccess == err) {
     for (size_t j = 0; j < 240; ++j) {
@@ -527,7 +537,7 @@ UError_t LCDDrv_SetBrightness(LCDDrvHandle_t handle, uint8_t b) {
     }
   }
 
-  LCDDrvContext_t* const lcd = HANDLE_TO_CONTEXTP(handle);
+  LCDDrvContext_t* const lcd = (LCDDrvContext_t*)handle;
 
   if (uSuccess == err) {
     pwm_set_gpio_level(lcd->bl, b);
@@ -545,7 +555,7 @@ UError_t LCDDrv_SwapBuff(LCDDrvHandle_t handle, const void* frame, uint16_t x, u
     }
   }
 
-  LCDDrvContext_t* const lcd = HANDLE_TO_CONTEXTP(handle);
+  LCDDrvContext_t* const lcd = (LCDDrvContext_t*)handle;
 
   if (uSuccess == err) {
     if (lcd->bBusy) {
