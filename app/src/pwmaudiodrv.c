@@ -29,9 +29,9 @@
 // defines
 //////////////////////////////////////////////////////////////////////////////
 
-#define AUDIO_FIFO_DEPTH (25)                                           //< FIFO深さ 500ms 分のデータが格納できるように設定
-#define AUDIODRV_FREQ (44100)                                           //< サンプル周波数
-#define AUDIOBUF_20MS_SZ (((((AUDIODRV_FREQ / 100) * 2) + 1) / 2) * 2)  //< 20ms 分のサンプルを格納可能なサイズ
+#define AUDIODRV_FREQ (44100)                                         //< サンプル周波数
+#define AUDIOBUF_CHANK_SZ ((((AUDIODRV_FREQ / 30 / 2) + 3) / 4) * 4)  //< 1/60秒 分のサンプルを格納可能なサイズ, DMAC割り込みの周期に影響する
+#define AUDIO_FIFO_DEPTH (25)                                         //< FIFO深さ 25段 = 0.41666..秒分のデータが格納できるように設定
 
 #define AUDIODRV0_PWM (16)  //< AUDIODRV0 で使用する GPIOピン
 
@@ -56,21 +56,19 @@ typedef struct AudioBufDesc_t {
  * ブロック配列は所望のFIFO深さ + 1が必要
  */
 typedef struct tagAudioFIFO_t {
-  AudioBufDesc_t* fifo[AUDIO_FIFO_DEPTH + 1];  //< FIFOバッファ
-  volatile size_t rpos;                        //< 読み出し位置
-  volatile size_t wpos;                        //< 書き出し位置
+  volatile AudioBufDesc_t* fifo[AUDIO_FIFO_DEPTH + 1];  //< FIFOバッファ
+  volatile size_t rpos;                                 //< 読み出し位置
+  volatile size_t wpos;                                 //< 書き出し位置
 } AudioFIFO_t;
 
 /**
  * @brief オーディオドライバ コンテキスト
  */
 typedef struct tagAudioDrvContext_t {
-  AudioFIFO_t poolBuf;                        //< 利用できるバッファディスクリプタを格納したFIFO
-  AudioFIFO_t busyBuf;                        //< 使用中(出力待ち)バッファディスクリプタを格納したFIFO
-  AudioBufDesc_t bufDescs[AUDIO_FIFO_DEPTH];  //< バッファディスクリプタ実体
-  // 20ms * 25 = 500ms サンプル分のオーディオバッファ
-  uint16_t audioBuf[AUDIOBUF_20MS_SZ * AUDIO_FIFO_DEPTH];  //< オーディオデータ実体
-  AudioBufDesc_t* workDesc;                                //< ユーザからのデータ入力中のバッファディスクリプタを保持
+  AudioFIFO_t poolBuf;                                      //< 利用できるバッファディスクリプタを格納したFIFO
+  AudioFIFO_t busyBuf;                                      //< 使用中(出力待ち)バッファディスクリプタを格納したFIFO
+  AudioBufDesc_t bufDescs[AUDIO_FIFO_DEPTH];                //< バッファディスクリプタ実体
+  uint16_t audioBuf[AUDIOBUF_CHANK_SZ * AUDIO_FIFO_DEPTH];  //< オーディオデータ実体
 
   /**
    * DMA動作状態(true: 動作中, false: 停止中) @\n
@@ -79,8 +77,8 @@ typedef struct tagAudioDrvContext_t {
    */
   volatile bool busy;
 
-  void (*isr)(void);           //< DMA割り込みハンドラ
-  AudioBufDesc_t* activeDesc;  //< 出力中のバッファディスクリプタを保持
+  void (*isr)(void);                    //< DMA割り込みハンドラ
+  volatile AudioBufDesc_t* activeDesc;  //< 出力中のバッファディスクリプタを保持
 
   // pico デバイス関係
   uint32_t dma_audio;             //< DMAチャンネル
@@ -102,7 +100,7 @@ typedef struct tagAudioDrvContext_t {
  * @retval true : データの投入成功
  * @retval true 以外 : データの投入に失敗. パラメータ異常 or バッファフル
  */
-static bool AudioFIFO_write(AudioFIFO_t* ctx, AudioBufDesc_t* data);
+static bool AudioFIFO_push(AudioFIFO_t* ctx, volatile AudioBufDesc_t* data);
 
 /**
  * @brief FIFOからのデータ取り出し処理
@@ -112,7 +110,7 @@ static bool AudioFIFO_write(AudioFIFO_t* ctx, AudioBufDesc_t* data);
  * @retval true : データ取り出し成功
  * @retval true 以外 : データ取り出しに失敗. パラメータ異常 or バッファエンプティ
  */
-static bool AudioFIFO_read(AudioFIFO_t* ctx, AudioBufDesc_t** pData);
+static bool AudioFIFO_pop(AudioFIFO_t* ctx, volatile AudioBufDesc_t** pData);
 
 /**
  * @brief AudioContext のFIFO情報の初期化を行う
@@ -201,7 +199,6 @@ static AudioDrvContext_t builtinContext[] = {
      .busyBuf = {.fifo = {0}, .rpos = 0u, .wpos = 0u},
      .bufDescs = {0},
      .audioBuf = {0},
-     .workDesc = NULL,
      .isr = &AudioDrv0_DMAHandler,
      .busy = false,
      .activeDesc = NULL,
@@ -217,7 +214,7 @@ static AudioDrvContext_t* builtinInUse[] = {NULL};
 // function
 //////////////////////////////////////////////////////////////////////////////
 
-static bool AudioFIFO_write(AudioFIFO_t* ctx, AudioBufDesc_t* data) {
+static bool AudioFIFO_push(AudioFIFO_t* ctx, volatile AudioBufDesc_t* data) {
   if (NULL == ctx || NULL == data) {
     return false;
   }
@@ -228,7 +225,7 @@ static bool AudioFIFO_write(AudioFIFO_t* ctx, AudioBufDesc_t* data) {
   }
 
   if (next == ctx->rpos) {
-    printf("[ERROR] next[%d] ctx->rpos[%d]", next, ctx->rpos);
+    // printf("[ERROR] next[%d] ctx->rpos[%d]", next, ctx->rpos);
     return false;  // バッファフル
   }
 
@@ -241,7 +238,7 @@ static bool AudioFIFO_write(AudioFIFO_t* ctx, AudioBufDesc_t* data) {
   return true;
 }
 
-static bool AudioFIFO_read(AudioFIFO_t* ctx, AudioBufDesc_t** pData) {
+static bool AudioFIFO_pop(AudioFIFO_t* ctx, volatile AudioBufDesc_t** pData) {
   if (NULL == ctx || NULL == pData) {
     return false;
   }
@@ -273,12 +270,13 @@ static UError_t AudioDrv_initPool(AudioDrvContext_t* ctx) {
   }
 
   if (uSuccess == err) {
+    // バッファプールに情報を登録する
     for (size_t i = 0; i < AUDIO_FIFO_DEPTH; ++i) {
-      // メモリ確保
-      ctx->bufDescs[i].buf = &ctx->audioBuf[AUDIOBUF_20MS_SZ * i];
-      ctx->bufDescs[i].size = AUDIOBUF_20MS_SZ;
+      // バッファディスクリプタ初期化, バッファプールに登録
+      ctx->bufDescs[i].buf = &ctx->audioBuf[AUDIOBUF_CHANK_SZ * i];
+      ctx->bufDescs[i].size = AUDIOBUF_CHANK_SZ;
       ctx->bufDescs[i].length = 0u;
-      if (!AudioFIFO_write(&ctx->poolBuf, &ctx->bufDescs[i])) {
+      if (!AudioFIFO_push(&ctx->poolBuf, &ctx->bufDescs[i])) {
         printf("[ERROR] AudioFIFO_write() [%d]\r\n", i);
         err = uFailure;
         break;
@@ -291,28 +289,28 @@ static UError_t AudioDrv_initPool(AudioDrvContext_t* ctx) {
 static void AudioDrv0_DMAHandler(void) {
   AudioDrvContext_t* const ctx = &builtinContext[0];
   if (NULL != ctx) {
-    AudioBufDesc_t* desc = NULL;
+    volatile AudioBufDesc_t* desc = NULL;
 
-    if (AudioFIFO_read(&ctx->busyBuf, &desc)) {
+    // 出力中のデータが存在する場合は, 利用可能バッファに戻す.
+    if (NULL != ctx->activeDesc) {
+      if (!AudioFIFO_push(&ctx->poolBuf, ctx->activeDesc)) {
+        printf("[ERROR] \r\n");
+      }
+      ctx->activeDesc = NULL;
+    }
+
+    if (AudioFIFO_pop(&ctx->busyBuf, &desc)) {
       // 出力待ちデータを取得し, DMA転送を開始する
       // printf("[INFO ] buf[%08lx] length[%ld]\n", (uint32_t)desc->buf, (uint32_t)desc->length);
       dma_channel_set_read_addr(ctx->dma_audio, desc->buf, false);
       dma_channel_set_trans_count(ctx->dma_audio, desc->length, true);
+      ctx->activeDesc = desc;
     } else {
-      // 出力待ちデータがない場合は, ビジーフラグを寝かし, PWMを停止する
-      printf("[WARN ]\r\n");
-      ctx->busy = false;
+      // 出力待ちデータがない場合(under flow)は, PWMを停止し, busyフラグを寝かす
       pwm_set_enabled(ctx->pwm_slice, false);
+      ctx->busy = false;
+      printf("[W]\r\n");
     }
-
-    // 出力中のデータが存在する場合は, 利用可能バッファに戻す.
-    if (NULL != ctx->activeDesc) {
-      if (!AudioFIFO_write(&ctx->poolBuf, ctx->activeDesc)) {
-        printf("[ERROR] \r\n");
-      }
-    }
-
-    ctx->activeDesc = desc;
 
     // 割り込みクリア
     dma_hw->ints0 = (1u << ctx->dma_audio);
@@ -365,23 +363,6 @@ static UError_t AudioDrv_initDMA(AudioDrvContext_t* ctx) {
     irq_set_enabled(DMA_IRQ_0, true);
   }
 
-  if (uSuccess == err) {
-    // 5 * 20ms = 100ms 分の空データを投入
-    for (size_t i = 0; i < 5; ++i) {
-      AudioBufDesc_t* cur = NULL;
-      if (!AudioFIFO_read(&ctx->poolBuf, &cur)) {
-        err = uFailure;
-        break;
-      }
-      memset(cur->buf, 0x0u, sizeof(uint16_t) * (441 * 2));
-      cur->length = 441 * 2;
-      if (!AudioFIFO_write(&ctx->busyBuf, cur)) {
-        err = uFailure;
-        break;
-      }
-    }
-  }
-
   return err;
 }
 
@@ -422,13 +403,15 @@ static UError_t AudioDrv_start(AudioDrvContext_t* ctx) {
   }
 
   if (uSuccess == err) {
-    if(false == ctx->busy){
+    // TODO: DMA割り込み禁止
+    if (false == ctx->busy) {
       ctx->busy = true;
       ctx->isr();
     }
+    // TODO: DMA割り込み解除
   }
 
-  if(uSuccess == err){
+  if (uSuccess == err) {
     pwm_set_enabled(ctx->pwm_slice, true);
   }
 
@@ -481,56 +464,51 @@ UError_t AudioDrv_Start(AudioDrvHandle_t handle) {
   return err;
 }
 
-int32_t AudioDrv_WriteSample(AudioDrvHandle_t handle, const void* src, size_t size) {
+int32_t AudioDrv_WriteSample(AudioDrvHandle_t handle, const void* const src, size_t const size) {
   UError_t err = uSuccess;
   AudioDrvContext_t* ctx = (AudioDrvContext_t*)handle;
-  int32_t pos = 0;
+  const uint8_t* ptr = (const uint8_t*)src;
+  int32_t ret = 0;
 
   if (uSuccess == err) {
-    if (NULL == ctx || ctx != builtinInUse[0] || NULL == src || 0 >= size) {
+    if (NULL == ctx || ctx != builtinInUse[0] || NULL == ptr || 0 >= size) {
       printf("[ERROR] %s(): invalid param\r\n", __FUNCTION__);
       err = uFailure;
     }
   }
 
   if (uSuccess == err) {
-    // size バイトループ
-    const uint8_t* s = (const uint8_t*)src;
-    for (; pos < size; ++pos) {
-      if (NULL == ctx->workDesc) {
-        // ワークバッファがなければ(前回の処理で残っているなら)
-        // 利用可能なバッファを取得
-        if (!AudioFIFO_read(&ctx->poolBuf, &ctx->workDesc)) {
-          // 利用可能なバッファがない = 書き込み終了
-          break;
-        }
-        ctx->workDesc->length = 0;  // サンプル数初期化
-      }
-      // 書き込み可能(書き込みサンプル数がバッファサイズより小さい)であれば,
-      // 書き込み
-      if (ctx->workDesc->length < ctx->workDesc->size) {
-        ctx->workDesc->buf[ctx->workDesc->length++] = s[pos];
-      } else {
-        // おそらく起こりえない. アルゴリズムエラー
-        printf("[ERROR] ?? length[%ld] >= size[%ld]\n", ctx->workDesc->length, ctx->workDesc->size);
-        err = uFailure;
-        break;
-      }
+    // 指定したバイト数(サンプル数)のデータをオーディオバッファに書き込む
+    volatile AudioBufDesc_t* buf = NULL;  // オーディオバッファディスクリプタ
+    size_t remain = size;
 
-      if (ctx->workDesc->size <= ctx->workDesc->length) {
-        // 結果, バッファを詰め切ったのであれば, 出力待ちFIFOに追加
-        if (!AudioFIFO_write(&ctx->busyBuf, ctx->workDesc)) {
-          printf("[ERROR] AudioFIFO_write() failure\r\n");
-          err = uFailure;
-          break;
+    while (0 < remain) {
+      // バッファプールから書き込み先オーディオバッファを取得
+      if (AudioFIFO_pop(&ctx->poolBuf, &buf)) {
+        // 指定バイト数か, バッファが埋まるまで書き込む
+        const size_t nbytewrite = (buf->size < remain) ? buf->size : remain;
+        for (size_t i = 0; i < nbytewrite; ++i) {
+          buf->buf[i] = ptr[ret + i];  // buf側はuint16_t なためmemcpyはNG
         }
-        ctx->workDesc = NULL;
-      }
+        buf->length = nbytewrite;
+        remain -= nbytewrite;
+        ret += nbytewrite;
+        // 出力待機FIFOに投入
+        if (AudioFIFO_push(&ctx->busyBuf, buf)) {
+          if (!ctx->busy) {
+            // PWMが停止状態であれば, 動作を開始する
+            (void)AudioDrv_start(ctx);
+            printf("[I] AudioDrv_start called\r\n");
+          }
+        }
+      } else {
+        break;
+      }  // if(AudioFIFO_read ...
     }
   }
 
   if (uSuccess != err) {
-    pos = -1;
+    ret = -1;
   }
-  return pos;
+  return ret;
 }

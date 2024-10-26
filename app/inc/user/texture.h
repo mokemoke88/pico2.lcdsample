@@ -1,16 +1,17 @@
 /**
- * @file prog01/app/inc/user/fontx2.h
- * FONTX2 形式のフォントを使用した文字列出力操作
+ * @file prog01/app/inc/user/texture.h
  *
- * @date 2024.10.13 k.shibata newly created
+ * @date 2024.10.26 k.shibata newly created
  */
 
-#if !defined(USER_FONTX2_H__)
-#define USER_FONTX2_H__
+#if !defined(USER_TEXTURE_H__)
+#define USER_TEXTURE_H__
 
 //////////////////////////////////////////////////////////////////////////////
 // includes
 //////////////////////////////////////////////////////////////////////////////
+
+#include <user/types.h>
 
 #include <stddef.h>
 #include <stdint.h>
@@ -23,6 +24,13 @@
 // typedef
 //////////////////////////////////////////////////////////////////////////////
 
+typedef struct tagTexture_t {
+  uint16_t w;
+  uint16_t h;
+  size_t s;
+  const void* buf;
+} Texture_t;
+
 //////////////////////////////////////////////////////////////////////////////
 // prototype
 //////////////////////////////////////////////////////////////////////////////
@@ -31,17 +39,9 @@
 extern "C" {
 #endif  // __cplusplus
 
-/**
- * @brief code に対する フォント情報を直接取得します
- * @param [in] code : 対象の文字コード
- * @param [out] pw : フォント幅(dot) 出力先
- * @param [out] ph : フォント高(dot) 出力先
- * @param [out] pfsz : データサイズ 出力先
- * @return フォント情報データ
- * @retval NULL 以外 : 該当のフォントデータ
- * @retval NULL : 該当するフォント情報がない
- */
-const uint8_t* FontX2_GetFont(uint16_t code, uint32_t* pw, uint32_t* ph, size_t* pfsz);
+UError_t Texture_Create(Texture_t* ctx, uint16_t w, uint16_t h, size_t s, const void* buf);
+uint16_t Texture_GetPixel(const Texture_t* ctx, uint16_t x, uint16_t y);
+const void* Texutre_GetBuf(const Texture_t* ctx);
 
 #ifdef __cplusplus
 }
@@ -51,4 +51,8 @@ const uint8_t* FontX2_GetFont(uint16_t code, uint32_t* pw, uint32_t* ph, size_t*
 // variable
 //////////////////////////////////////////////////////////////////////////////
 
-#endif  // !defined(USER_FONTX2_H__)
+//////////////////////////////////////////////////////////////////////////////
+// function
+//////////////////////////////////////////////////////////////////////////////
+
+#endif  // USER_TEXTURE_H__

@@ -67,7 +67,7 @@ size_t LinkedList_Count(LinkedList_t* list);
  * @retval NULL以外 : 指定した位置の要素
  * @retval NULL : 指定した位置に要素が存在しない
  */
-const LinkedList_t* LinkedList_Get(LinkedList_t* list, const size_t pos);
+const LinkedList_t* LinkedList_Get(LinkedList_t* list, size_t pos);
 
 /**
  * 先頭から要素を取り出す

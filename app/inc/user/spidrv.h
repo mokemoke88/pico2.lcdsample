@@ -38,9 +38,9 @@ UError_t SPIDrv_Open(SPIDrvHandle_t* handle);
 void SPIDrv_Close(SPIDrvHandle_t handle);
 
 UError_t SPIDrv_Init(SPIDrvHandle_t handle, uint32_t baudrate);
-UError_t SPIDrv_SendByte(const SPIDrvHandle_t handle, const uint8_t data);
+UError_t SPIDrv_SendByte(const SPIDrvHandle_t handle, uint8_t data);
 UError_t SPIDrv_RecvByte(const SPIDrvHandle_t handle, uint8_t* data);
-UError_t SPIDrv_TransferByte(const SPIDrvHandle_t handle, const uint8_t tx, uint8_t* rx);
+UError_t SPIDrv_TransferByte(const SPIDrvHandle_t handle, uint8_t tx, uint8_t* rx);
 
 /**
  * @brief 同期データ送信を行う

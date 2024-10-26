@@ -58,7 +58,7 @@ void Textbox_Destroy(TextboxHandle_t handle);
  * @retval NULL以外 : 指定した行の行データ
  * @retval NULL : 指定した行が存在しない
  */
-const void* Textbox_GetRow(TextboxHandle_t handle, size_t* pLength, const size_t pos);
+const void* Textbox_GetRow(TextboxHandle_t handle, size_t* pLength, size_t pos);
 
 /**
  * @brief 行数を返す

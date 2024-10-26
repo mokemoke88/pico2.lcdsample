@@ -27,6 +27,11 @@
 #include <user/textbox.h>     // textbox
 #include <user/utf8string.h>  // 文字処理
 
+#include <user/gui.h>  // GUI 部品
+
+#include <app/app.h>
+#include <app/diag.h>
+
 #include <stdio.h>
 #include <string.h>
 
@@ -37,11 +42,11 @@
 // defines
 //////////////////////////////////////////////////////////////////////////////
 
-#define FRAMEBUF_SZ (240 * 320)
-#define FRAMEBUF_NUM (2)
+#define FRAMEBUF_SZ (240 * 320)  //< フレームバッファの縦横サイズ
+#define FRAMEBUF_NUM (2)         //< フレームバッファの面数
 
-#define CONSOLEHEAP_SZ (50 * 256)
-#define FRAME_CONSOLEHEAP_SZ (4 * 256)
+#define CONSOLEHEAP_SZ (50 * 256)       // コンソールヒープのバイト数
+#define FRAME_CONSOLEHEAP_SZ (4 * 256)  // DIAGコンソールヒープのバイト数
 
 //////////////////////////////////////////////////////////////////////////////
 // typedef
@@ -55,253 +60,16 @@
 // variable
 //////////////////////////////////////////////////////////////////////////////
 
-#include "resources/wallpaper.h"  // 背景画像データ
-
 static uint16_t gFramebuf[FRAMEBUF_SZ * FRAMEBUF_NUM] = {0};   //< フレームバッファメモリ
 static uint8_t gConsoleHeap[CONSOLEHEAP_SZ] = {0};             //< コンソール用データ領域
 static uint8_t gFrameConsoleHeap[FRAME_CONSOLEHEAP_SZ] = {0};  //< フレーム情報表示用
+static uint8_t audio_data[441 * 6 * 2] = {0};                  //< 60ミリ分のオーディオデータ
 
 //////////////////////////////////////////////////////////////////////////////
 // function
 //////////////////////////////////////////////////////////////////////////////
 
-/**
- * canvas の指定位置に字形を出力します
- * @param [in] canvas : 出力対象
- * @param [in] posx : 出力先x座標値
- * @param posy
- * @param color
- * @param fgraph
- * @param fw
- * @param fh
- * @param fsz
- * @return
- */
-UError_t renderFont(Canvas_t const* canvas, const size_t posx, const size_t posy, const uint16_t color, const uint8_t* fgraph, const size_t fw, const size_t fh,
-                    const size_t fsz) {
-  UError_t err = uSuccess;
-  if (uSuccess == err) {
-    if (NULL == canvas || NULL == fgraph || 0 == fsz) {
-      err = uFailure;
-    }
-  }
-
-  if (uSuccess == err) {
-    LOG_I("w[%d] h[%d] fsz[%d]", fw, fh, fsz);
-    const size_t fbw = (fw + (8u - 1u)) / 8u;  // フォントのバイト幅
-    const uint8_t* addr = fgraph;
-    for (uint32_t fy = 0; fy < fh; ++fy) {
-      for (uint32_t fx = 0; fx < fw; ++fx) {
-        const size_t bpos = (fx >> 3);       //(fx / 8);
-        const size_t bshift = (fx & 0b111);  //(fx % 8);
-        const uint8_t c = *(addr + bpos) << bshift;
-        if (c & 0b10000000) {
-          Canvas_DrawPixel(canvas, posx + fx, posy + fy, color);
-        }
-      }
-      addr += fbw;
-    }
-  }
-}
-
-/**
- * Textbox を描画
- * @param canvas : 描画先
- * @param textbox : 出力するTextboxインスタンス
- * @param posx : 出力座標 x
- * @param posy : 出力座標 y
- * @param color : 色
- * @return
- */
-UError_t renderTextbox(Canvas_t const* canvas, TextboxHandle_t textbox, const uint32_t posx, const uint32_t posy, const uint16_t color) {
-  UError_t err = uSuccess;
-
-  if (uSuccess == err) {
-    if (NULL == canvas || NULL == textbox) {
-      err = uFailure;
-    }
-  }
-
-  if (uSuccess == err) {
-    const size_t orgX = posx;
-    const size_t orgY = posy;
-
-    const size_t rows = Textbox_CountRow(textbox);
-    size_t curY = orgY;
-    for (size_t i = 0; i < rows; ++i) {
-      size_t dlen = 0u;
-      size_t curX = orgX;
-      const char* data = (const char*)Textbox_GetRow(textbox, &dlen, i);
-      if (NULL != data && 0 < dlen) {
-        // CanvasにTextboxから取得したデータを描画する
-        size_t offset = 0;
-        size_t r = 0;
-        uint32_t utf32 = 0u;
-        while (dlen > offset) {
-          if (uSuccess == UTF8String_ToUTF32(&utf32, &r, data + offset, dlen - offset)) {
-            uint16_t sjis = UTF8String_UTF32toSJIS(utf32);
-            uint32_t fw, fh;
-            size_t fsz;
-            const uint8_t* fgraph = FontX2_GetFont(sjis, &fw, &fh, &fsz);
-            if (NULL != fgraph) {
-              renderFont(canvas, curX, curY, color, fgraph, fw, fh, fsz);
-            } else {
-              // 字形無し
-            }
-            curX += fw;
-            offset += r;
-          } else {
-            break;
-          }
-        }  // while(dlen > offset ...
-      }
-      curY += 16;
-    }
-  }
-  return err;
-}
-
-typedef struct tagCirclePointer_t {
-  uint16_t x;
-  uint16_t y;
-  uint16_t r;
-  uint8_t red;
-  uint8_t green;
-  uint8_t blue;
-
-  bool active;
-  uint16_t frame;
-} CirclePointer_t;
-
-typedef struct tagCirclePointerEvent_t {
-  bool enable;
-  uint16_t x;
-  uint16_t y;
-} CirclePointerEvent_t;
-
-void CirclePointer_Event(CirclePointer_t* self, CirclePointerEvent_t* event) {
-  if (!self->active && event->enable) {
-    self->x = event->x;
-    self->y = event->y;
-    self->frame = 0;
-    self->r = 1;
-    self->active = true;
-  } else if (self->active) {
-    self->frame++;
-    if (16 > self->frame) {
-      self->r += 2;
-    } else {
-      self->active = false;
-    }
-  }
-}
-
-void CirclePointer_Render(CirclePointer_t* self, const Canvas_t* canvas) {
-  if (self->active) {
-    Canvas_DrawCircle(canvas, self->x, self->y, self->r, RGB888toRGB565(self->red, self->green, self->blue));
-  }
-}
-
-/**
- * @brief GUI部品 スライダー
- * 入力を受けて指示位置を変更する
- */
-typedef struct tagSlider_t {
-  uint16_t x;
-  uint16_t y;
-  uint16_t w;
-  uint16_t h;
-  uint8_t pos;
-} Slider_t;
-
-void Slider_Event(Slider_t* self, uint16_t absX, uint16_t absY) {
-  // if(self->x > absX){
-  //   return;
-  // }
-
-  if (self->y > absY) {
-    return;
-  }
-
-  // if((self->x + self->w) < absX){
-  //   return;
-  // }
-
-  if ((self->y + self->h) < absY) {
-    return;
-  }
-
-  // 垂直スライダーとする
-  self->pos = ((absY - self->y) << 7) / self->h;
-}
-
-uint8_t Slider_GetPosition(Slider_t* self) {
-  if (NULL == self) {
-    return 0u;
-  }
-  return self->pos;
-}
-
-void Slider_Render(Slider_t* self, const Canvas_t* canvas) {
-  if (NULL == self) {
-    return;
-  }
-
-  uint32_t y = self->y + ((self->pos * self->h) >> 7);
-
-  // ガイド表示
-  Canvas_DrawLine(canvas, self->x, self->y, self->x, self->y + self->h, RGB888toRGB565(0, 0, 0xff));
-  Canvas_DrawLine(canvas, self->x, self->y, self->x + self->w, self->y, RGB888toRGB565(0, 0, 0xff));
-  Canvas_DrawLine(canvas, self->x + self->w, self->y, self->x + self->w, self->y + self->h, RGB888toRGB565(0, 0, 0xff));
-  Canvas_DrawLine(canvas, self->x, self->y + self->h, self->x + self->w, self->y + self->h, RGB888toRGB565(0, 0, 0xff));
-
-  Canvas_DrawFillCircle(canvas, self->x + (self->w / 2), y, 8, RGB888toRGB565(0xff, 0, 0));
-}
-
-// スライダー
-static Slider_t sliderP = {.x = 240 - 16 - 16, .y = 32, .w = 16, .h = 320 - 32 - 32, .pos = 127};
-
-/**
- * @brief レンダリング処理
- * @param canvas
- * @param f
- * @return
- */
-static UError_t Render(Canvas_t const* canvas, const uint32_t f, CirclePointer_t* circle) {
-  UError_t err = uSuccess;
-  if (NULL == canvas) {
-    err = uFailure;
-  }
-  if (uSuccess == err) {
-    // 罫線描画
-
-#if 0
-    Canvas_DrawLine(canvas, 0, 0, 239, 319, RGB888toRGB565(0xff, 0, 0));
-    Canvas_DrawLine(canvas, 239, 0, 0, 319, RGB888toRGB565(0xff, 0, 0));
-
-    Canvas_DrawLine(canvas, 0, 0, 0, 319, RGB888toRGB565(0xff, 0, 0));
-    Canvas_DrawLine(canvas, 100, 0, 100, 319, RGB888toRGB565(0xff, 0, 0));
-    Canvas_DrawLine(canvas, 200, 0, 200, 319, RGB888toRGB565(0xff, 0, 0));
-
-    Canvas_DrawLine(canvas, 0, 0, 239, 0, RGB888toRGB565(0xff, 0, 0));
-    Canvas_DrawLine(canvas, 0, 100, 239, 100, RGB888toRGB565(0xff, 0, 0));
-    Canvas_DrawLine(canvas, 0, 200, 239, 200, RGB888toRGB565(0xff, 0, 0));
-    Canvas_DrawLine(canvas, 0, 300, 239, 300, RGB888toRGB565(0xff, 0, 0));
-
-    // サークル描画
-    Canvas_DrawCircle(canvas, 100, 100, (f % 30) + 1, RGB888toRGB565(0, 0xff, 0));
-
-    // サークル描画2
-    Canvas_DrawFillCircle(canvas, 200, 200, (f % 20) + 1, RGB888toRGB565(0x0f + (f % 20) * 10, 0x0f + (f % 20) * 10, 0xff));
-#endif
-
-    CirclePointer_Render(circle, canvas);
-    Slider_Render(&sliderP, canvas);
-  }
-  return err;
-}
-
-uint8_t audiodata[441 * 6] = {0};
+#define ToneDelta(X) (((8192 * 65536 * X) / 44100) >> 16)
 
 /**
  * エントリポイント
@@ -311,12 +79,15 @@ int main(void) {
 
   printf("PICO2 LCD Controller \r\n");
 
+  // タッチパッドデバイス準備
   CST328DrvHandle_t hTouch = NULL;
   CST328Drv_Open(&hTouch);
 
+  // SPIデバイス準備
   SPIDrvHandle_t hSpi = NULL;
   SPIDrv_Open(&hSpi);
 
+  // LCDデバイス準備
   LCDDrvHandle_t hLcd = NULL;
   LCDDrv_Open(&hLcd, hSpi);
 
@@ -346,111 +117,116 @@ int main(void) {
   // LCD輝度調整
   LCDDrv_SetBrightness(hLcd, 0xff);
 
-  // 円ポインタ
-  CirclePointer_t circleP = {.active = false, .red = 0xff, .green = 0x00, .blue = 0x00};
-
   // サンプルデータを初期化(全部127に)
-  memset(audiodata, 127u, sizeof(audiodata) / sizeof(audiodata[0]));
+  memset(audio_data, 1, sizeof(audio_data) / sizeof(audio_data[0]));
 
+  // オーディオデバイス初期化
   AudioDrvHandle_t hAudio = NULL;
   if (uSuccess != AudioDrv_Open(&hAudio)) {
     printf("[ERROR] AudioDrv_Open() failure\r\n");
     while (1);
   }
-  if (uSuccess != AudioDrv_Start(hAudio)) {
-    printf("[ERROR] AudioDrv_Start() failure\r\n");
-    while (1);
-  }
+
+  // Appオブジェクトを初期化
+  AppObject_t app = AppInit();
+
+  // Diagオブジェクトを初期化
+  DiagObject_t diag = DiagInit();
 
   LOG_D("Enter EventLoop");
 
-  uint32_t f = 0u;  //< フレームカウンタ
+  uint32_t frame_counter = 0u;  //< フレームカウンタ
 
   // フレーム更新間隔計測用
-  absolute_time_t btime = get_absolute_time();                     //< フレーム更新間隔計測用
-  absolute_time_t etime = btime;                                   //< フレーム更新間隔計測用
-  absolute_time_t difftime = absolute_time_diff_us(btime, etime);  //< フレーム更新間隔計測用
+  absolute_time_t frame_starttime = get_absolute_time();                                 //< フレーム更新間隔計測用
+  absolute_time_t frame_time = absolute_time_diff_us(frame_starttime, frame_starttime);  //< フレーム更新間隔計測用
 
   // フレーム処理時間計測用
-  absolute_time_t proc_difftime = 0;
+  absolute_time_t proc_time = 0;
 
   while (true) {
-    absolute_time_t proc_btime = get_absolute_time();     // フレーム所要時間計時
-    Canvas_t* frame = (f % 2) ? &canvas[0] : &canvas[1];  // 使用するCanvas(フレームバッファ)の選択
+    absolute_time_t proc_starttime = get_absolute_time();             // フレーム所要時間計時
+    Canvas_t* frame = (frame_counter % 2) ? &canvas[0] : &canvas[1];  // 使用するCanvas(フレームバッファ)の選択
+
+    const size_t audio_size = 2940;       // オーディオサンプル数
+    memset(audio_data, 0x0, audio_size);  // オーディオデータをフラットに
 
     CST328Drv_UpdateCoord(hTouch);  // タッチパッド情報(入力)を更新
+    // TODO: 情報の抽象化: タッチパッド情報からアプリケーション入力情報への変換処理
+    CST328Data_t touch_data;
+    CST328Drv_GetCoord(hTouch, &touch_data);
 
-    // タッチパッド情報を使用した処理
+    // アプリケーション処理を移す
+    // note: オーディオは, フレーム分のオーディオバッファを渡し,
+    //  アプリケーション側で内容を更新, その内容を出力する
     {
-      CST328Data_t data;
-      CST328Drv_GetCoord(hTouch, &data);
-
-      // サークルポインタ処理
-      CirclePointerEvent_t ev = {
-          .enable = (data.points > 0),
-          .x = data.coords[0].x,
-          .y = data.coords[0].y,
+      AppArg_t appArg = {
+          .frame = frame,
+          .frameCount = frame_counter,
+          .hLCD = hLcd,
+          .touch = &touch_data,
+          .audio_buff = audio_data,
+          .audio_size = audio_size,
       };
-      CirclePointer_Event(&circleP, &ev);
-
-      // スライダー処理
-      if (data.points > 0) {
-        Slider_Event(&sliderP, data.coords[0].x, data.coords[0].y);
-      }
-      // スライダの位置情報に合わせてバックライド輝度を更新
-      uint8_t b = Slider_GetPosition(&sliderP);  // 0 - 127 (0x0 - 0x7f) で値を返す
-      LCDDrv_SetBrightness(hLcd, ((uint32_t)0xff * b) >> 7);
+      AppUpdate(&app, &appArg);
     }
 
-    // Canvas_Clear(frame, RGB888toRGB565(0x90, 0x90, 0x90));  // クリア = 全画面書き換え 所要時間:8ms程度
-    Canvas_Blt(frame, 0, 0, (const uint16_t*)&wallpaper[12], 0, 0, 480, 240, 320);  // 壁紙で塗りつぶし 所要時間:8ms程度
-    //{
-    //  static size_t i = 0;
-    //  Canvas_Blt(frame, (i % 10) * 24, (i / 10) * 32, (const uint16_t*)&wallpaper[12], (i % 10) * 24, (i / 10) * 32, 480, 24, 32);
-    //  ++i;
-    //  i %= 100;
-    //}
-    Render(frame, f, &circleP);  // 描画処理
-
+    // タッチ情報を描画
     {
-      // オーディオ再生
-      AudioDrv_WriteSample(hAudio, audiodata, sizeof(audiodata) / sizeof(audiodata[0]));
-    }
-
-    {
-      // タッチ情報を描画
-      CST328Data_t data;
-      static uint8_t debounce = 0x00;
-      (void)CST328Drv_GetCoord(hTouch, &data);
-      if (0 < data.points) {
+      if (0 < touch_data.points) {
         char sbuf[128] = {0};
-        for (size_t i = 0; i < data.points; ++i) {
-          sprintf(sbuf, "%d:I[%1d]X[%3d]Y[%3d]S[%3d]P[%1x]", i, data.coords[i].id, data.coords[i].x, data.coords[i].y, data.coords[i].strength,
-                  data.coords[i].status);
+        for (size_t i = 0; i < touch_data.points; ++i) {
+          sprintf(sbuf, "%d:I[%1d]X[%3d]Y[%3d]S[%3d]P[%1x]", i, touch_data.coords[i].id, touch_data.coords[i].x, touch_data.coords[i].y,
+                  touch_data.coords[i].strength, touch_data.coords[i].status);
           Textbox_Push(hTextbox, sbuf, strlen(sbuf));
         }
       }
-      renderTextbox(frame, hTextbox, 10, 10 + 32, RGB888toRGB565(0xf, 0xf, 0xf));
+      {
+        GUITextbox_t guiText = {0};
+        if (uSuccess == GUITextbox_Create(&guiText, hTextbox)) {
+          GUITextboxRender(&guiText, frame, 10, 10 + 32, RGB888toRGB565(0xf, 0xf, 0xf));
+        }
+      }
     }
 
-    // diag 表示
+    // diag 表示(画面上端タッチで表示, 非表示切替)
     {
-      char sbuf[128] = {0};
-      sprintf(sbuf, "フレーム周期: %6lld us\n", difftime);
-      Textbox_Push(hFrameTextbox, sbuf, strlen(sbuf));
-      sprintf(sbuf, "フレーム処理: %6lld us\n", proc_difftime);
-      Textbox_Push(hFrameTextbox, sbuf, strlen(sbuf));
-      // テキストボックスの内容を描画
-      renderTextbox(frame, hFrameTextbox, 10, 10, RGB888toRGB565(0xf, 0xf, 0xf));
+      DiagArg_t arg = {.frame = frame, .text = hFrameTextbox, .frameTime = frame_time, .procTime = proc_time, .touch = &touch_data};
+      DiagUpdate(&diag, &arg);
     }
 
-    etime = get_absolute_time();
-    difftime = absolute_time_diff_us(btime, etime);
-    proc_difftime = absolute_time_diff_us(proc_btime, etime);
-    btime = etime;
+    // オーディオドライバでオーディオデータ供給
+    // 1/15 = 0.06666....
+    // 44100/15 = 2940 となるため, フレーム更新間隔の調整は
+    // オーディオデータの出力間隔基準で処理した方が単純
+    // !! 結果として1フレーム分 (1/15) 秒 の時間調整が行われるため !!
+    // !! 出力するオーディオデータがなくとも空データを出力している  !!
+    absolute_time_t audio_starttime = get_absolute_time();
+    {
+      // 今フレーム分のオーディオデータを出力
+      size_t remain = audio_size;
+      int32_t written = 0;
+      size_t offset = 0;
+      while (0 < remain) {
+        written = AudioDrv_WriteSample(hAudio, audio_data + offset, remain);
+        if (0 > written) {
+          // TODO: エラー処理
+          break;
+        }
+        remain -= written;
+        offset += written;
+      }
+    }
+    absolute_time_t audio_endtime = get_absolute_time();
+
+    // 計時更新
+    absolute_time_t endtime = get_absolute_time();                      // フレーム処理終了時刻
+    frame_time = absolute_time_diff_us(frame_starttime, endtime);       // フレーム周期(描画更新間隔)
+    proc_time = absolute_time_diff_us(audio_starttime, audio_endtime);  // フレーム内処理時間
+    frame_starttime = endtime;
+    frame_counter++;
 
     LCDDrv_SwapBuff(hLcd, Canvas_GetBuf(frame), 0, 0, 240, 320);
-    f++;
   }
   return 0;
 }

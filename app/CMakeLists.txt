@@ -6,6 +6,7 @@ set(SRC
 src/main.c
 src/spidrv.c
 src/lcddrv.c
+src/texture.c
 src/canvas.c
 src/fontx2.c
 src/linkedlist.c
@@ -13,6 +14,11 @@ src/utf8string.c
 src/textbox.c
 src/cst328drv.c
 src/pwmaudiodrv.c
+src/gui/textbox.c
+src/app/diag.c
+src/app/app.c
+src/audio/nco.c
+src/audio/ego.c
 )
 add_executable(app ${SRC})
 target_link_libraries(app pico_stdlib hardware_spi hardware_dma hardware_pwm hardware_i2c)

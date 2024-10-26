@@ -1,17 +1,27 @@
 /**
- * @file prog01/app/inc/user/utf8string.h
+ * @file prog01/app/inc/app/diag.h
  *
- * @date 2024.10.12 k.shibata newly created
+ * @date 2024.10.27 k.shibata newly created
  */
+
+#if !defined(APP_DIAG_H__)
+#define APP_DIAG_H__
 
 //////////////////////////////////////////////////////////////////////////////
 // includes
 //////////////////////////////////////////////////////////////////////////////
 
+#include <user/types.h>
+
+#include <pico/types.h>
+
+#include <user/canvas.h>
+#include <user/cst328drv.h>
+#include <user/textbox.h>
+
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-
-#include <user/types.h>
 
 //////////////////////////////////////////////////////////////////////////////
 // defines
@@ -21,35 +31,36 @@
 // typedef
 //////////////////////////////////////////////////////////////////////////////
 
+/**
+ * @brief Diag 入力情報
+ */
+typedef struct tagDiagArg_t {
+  const absolute_time_t frameTime;
+  const absolute_time_t procTime;
+  TextboxHandle_t text;
+  Canvas_t* frame;
+  const CST328Data_t* touch;
+} DiagArg_t;
+
+/**
+ * @brief Diag オブジェクト
+ */
+typedef struct tagDiagObject_t {
+  UError_t (*ActionFn)(struct tagDiagObject_t*, const DiagArg_t*);
+  bool press;
+  bool hit;
+} DiagObject_t;
+
 //////////////////////////////////////////////////////////////////////////////
 // prototype
 //////////////////////////////////////////////////////////////////////////////
 
 #ifdef __cplusplus
-extern "c" {
+extern "C" {
 #endif  //__cplusplus
 
-/**
- * UTF8文字列から先頭の1文字を表すUTF32キャラクタコードと読み進めたバイト数を返す.
- * @param [out] pUtf32 : キャラクタコード出力先
- * @param [out] pRead : 読み進めたバイト数の出力先
- *   @arg NULL : 出力しない
- *   @arg NULL以外 : 読み進めたバイト数を出力
- * @param [in] utf8s : 対象とするUTF8文字列
- * @param [in] length : 文字列のバイト数. 1以上必要
- * @return 処理結果.
- * @retval eSuccess : 処理成功. キャラクタコード, 読み進めたバイト数を出力する.
- * @retval eFailure : 処理失敗. 読み進めたバイト数のみ出力する.
- */
-UError_t UTF8String_ToUTF32(int32_t* pUtf32, size_t* pRead, const char* utf8s, size_t length);
-
-/**
- * UTF32(UNICODE) 文字コードを SJIS文字コードに変換する.
- * 変換出来ない場合は0u を返す.
- * @param [in] utf32 : 変換対象の文字コード
- * @return 変換結果
- */
-uint16_t UTF8String_UTF32toSJIS(int32_t utf32);
+UError_t DiagUpdate(DiagObject_t* diag, const DiagArg_t* arg);
+DiagObject_t DiagInit(void);
 
 #ifdef __cplusplus
 }
@@ -62,3 +73,5 @@ uint16_t UTF8String_UTF32toSJIS(int32_t utf32);
 //////////////////////////////////////////////////////////////////////////////
 // function
 //////////////////////////////////////////////////////////////////////////////
+
+#endif  // APP_DIAG_H__

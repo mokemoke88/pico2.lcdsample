@@ -77,7 +77,7 @@ UError_t LCDDrv_InitalizeHW(LCDDrvHandle_t handle);
  * @return 処理結果
  * @retval SUCCESS : 処理成功
  */
-UError_t LCDDrv_SetWindow(LCDDrvHandle_t handle, const uint16_t x, const uint16_t y, const uint16_t width, const uint16_t height);
+UError_t LCDDrv_SetWindow(LCDDrvHandle_t handle, uint16_t x, uint16_t y, uint16_t width, uint16_t height);
 
 /**
  * @brief 指定した色で画面を塗りつぶします.
@@ -88,7 +88,7 @@ UError_t LCDDrv_SetWindow(LCDDrvHandle_t handle, const uint16_t x, const uint16_
  * @return 処理結果
  * @retval SUCCESS : 処理成功
  */
-UError_t LCDDrv_Clear(LCDDrvHandle_t handle, const uint8_t r, const uint8_t g, const uint8_t b);
+UError_t LCDDrv_Clear(LCDDrvHandle_t handle, uint8_t r, uint8_t g, uint8_t b);
 
 /**
  * @brief バックライトの輝度を設定する.

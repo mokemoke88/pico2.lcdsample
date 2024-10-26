@@ -54,6 +54,7 @@ UError_t AudioDrv_Start(AudioDrvHandle_t handle);
 
 /**
  * @brief オーディオバッファにサンプルデータ(uint8_t 0x00 - 0xff) を書き込みます.
+ * オーディオ出力が停止している場合は出力を開始します.
  *
  * @param [in] handle : 処理対象
  * @param [in] src : 書き込むサンプルデータ

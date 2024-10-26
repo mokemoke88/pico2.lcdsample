@@ -1,6 +1,6 @@
 /**
  * @file prog01/app/src/textbox.c
- * 
+ *
  * 最大指定行数, 各行最大指定バイト数のデータを保持するバッファ構造
  *
  * @date 2024.10.13 k.shibata newly created
@@ -25,6 +25,12 @@
 //////////////////////////////////////////////////////////////////////////////
 // defines
 //////////////////////////////////////////////////////////////////////////////
+
+#define BUILTIN_LINEBUF_NUM (32)  // ラインバッファ数 TODO: resource.h 等に移動
+#define BUILTIN_TEXTBOX_NUM (8)   //< テキストボックス数 TODO: resource.h 等に移動
+
+#define BUILTIN_LINEBUF_STATUS_NUM ((BUILTIN_LINEBUF_NUM + 7) / 8)
+#define BUILTIN_TEXTBOX_STATUS_NUM ((BUILTIN_TEXTBOX_NUM + 7) / 8)
 
 //////////////////////////////////////////////////////////////////////////////
 // typedef
@@ -77,17 +83,11 @@ inline static size_t NEARPOW2(size_t value);
 
 // Linebuf, Textbox のリソースを定義
 
-#define BUILTIN_LINEBUF_NUM (32)
-#define BUILTIN_LINEBUF_STATUS_NUM ((BUILTIN_LINEBUF_NUM + 7) / 8)
+static TextboxLineBuffer_t builtinLinebuf[BUILTIN_LINEBUF_NUM] = {0};     // ラインバッファ実体
+static uint8_t builtinLinebufs_status[BUILTIN_LINEBUF_STATUS_NUM] = {0};  // ラインバッファ利用状態
 
-static TextboxLineBuffer_t builtinLinebuf[BUILTIN_LINEBUF_NUM] = {0};
-static uint8_t builtinLinebufs_status[BUILTIN_LINEBUF_STATUS_NUM] = {0};
-
-#define BUILTIN_TEXTBOX_NUM (8)
-#define BUILTIN_TEXTBOX_STATUS_NUM ((BUILTIN_TEXTBOX_NUM + 7) / 8)
-
-static TextboxContext_t builtinTextbox[BUILTIN_TEXTBOX_NUM] = {0};
-static uint8_t builtinTextboxes_status[BUILTIN_TEXTBOX_STATUS_NUM] = {0};
+static TextboxContext_t builtinTextbox[BUILTIN_TEXTBOX_NUM] = {0};         // テキストボックス実体
+static uint8_t builtinTextboxes_status[BUILTIN_TEXTBOX_STATUS_NUM] = {0};  // テキストボックス利用状態
 
 //////////////////////////////////////////////////////////////////////////////
 // function
@@ -314,9 +314,9 @@ void Textbox_Destroy(TextboxHandle_t handle) {
       size_t p = (index >> 3);
       size_t m = (index & 0b111);
       uint8_t mask = (1u << m);
-      //LOG_D("builtinTextboxes_status[%d]: before [%02x]", p, builtinTextboxes_status[p]);
+      // LOG_D("builtinTextboxes_status[%d]: before [%02x]", p, builtinTextboxes_status[p]);
       builtinTextboxes_status[p] &= ~mask;
-      //LOG_D("builtinTextboxes_status[%d]: after  [%02x]", p, builtinTextboxes_status[p]);
+      // LOG_D("builtinTextboxes_status[%d]: after  [%02x]", p, builtinTextboxes_status[p]);
     }
   }
 }

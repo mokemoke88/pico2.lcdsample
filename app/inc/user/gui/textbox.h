@@ -1,16 +1,20 @@
 /**
- * @file prog01/app/inc/user/fontx2.h
- * FONTX2 形式のフォントを使用した文字列出力操作
+ * @file prog01/app/inc/user/gui/textbox.h
  *
- * @date 2024.10.13 k.shibata newly created
+ * @date 2024.10.26 k.shibata newly created
  */
 
-#if !defined(USER_FONTX2_H__)
-#define USER_FONTX2_H__
+#if !defined(USER_GUI_TEXTBOX_H__)
+#define USER_GUI_TEXTBOX_H__
 
 //////////////////////////////////////////////////////////////////////////////
 // includes
 //////////////////////////////////////////////////////////////////////////////
+
+#include <user/types.h>
+
+#include <user/canvas.h>
+#include <user/textbox.h>
 
 #include <stddef.h>
 #include <stdint.h>
@@ -23,32 +27,34 @@
 // typedef
 //////////////////////////////////////////////////////////////////////////////
 
+typedef void* GUITextboxHandle_t;
+
+typedef struct tagGUITextbox_t {
+  TextboxHandle_t textbox_;
+} GUITextbox_t;
+
 //////////////////////////////////////////////////////////////////////////////
 // prototype
 //////////////////////////////////////////////////////////////////////////////
 
 #ifdef __cplusplus
 extern "C" {
-#endif  // __cplusplus
+#endif //__cplusplus
 
-/**
- * @brief code に対する フォント情報を直接取得します
- * @param [in] code : 対象の文字コード
- * @param [out] pw : フォント幅(dot) 出力先
- * @param [out] ph : フォント高(dot) 出力先
- * @param [out] pfsz : データサイズ 出力先
- * @return フォント情報データ
- * @retval NULL 以外 : 該当のフォントデータ
- * @retval NULL : 該当するフォント情報がない
- */
-const uint8_t* FontX2_GetFont(uint16_t code, uint32_t* pw, uint32_t* ph, size_t* pfsz);
+UError_t GUITextbox_Create(GUITextbox_t* gui, TextboxHandle_t textbox);
+UError_t GUITextbox_Attach(GUITextbox_t* gui, TextboxHandle_t textbox);
+UError_t GUITextboxRender(GUITextbox_t* gui, Canvas_t const* canvas, const uint32_t posx, const uint32_t posy, const uint16_t color);
 
 #ifdef __cplusplus
 }
-#endif  // __cplusplus
+#endif //__cplusplus
 
 //////////////////////////////////////////////////////////////////////////////
 // variable
 //////////////////////////////////////////////////////////////////////////////
 
-#endif  // !defined(USER_FONTX2_H__)
+//////////////////////////////////////////////////////////////////////////////
+// function
+//////////////////////////////////////////////////////////////////////////////
+
+#endif //USER_GUI_TEXTBOX_H__
