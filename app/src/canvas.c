@@ -1,18 +1,19 @@
 /**
  * @file prog01/app/src/canvas.c
+ *
  */
 
 //////////////////////////////////////////////////////////////////////////////
 // includes
 //////////////////////////////////////////////////////////////////////////////
 
+#include <user/canvas.h>
+
+#include <user/types.h>
+
 #include <stddef.h>
 #include <stdint.h>
-
 #include <string.h>
-
-#include <user/canvas.h>
-#include <user/types.h>
 
 //////////////////////////////////////////////////////////////////////////////
 // defines
@@ -28,7 +29,7 @@
 
 inline static UError_t clear(const Canvas_t* const ctx, const uint16_t c);
 
-inline static UError_t setPixel(const Canvas_t* const ctx, const uint32_t x, const uint32_t y, const uint16_t c);
+inline static UError_t setPixel(const Canvas_t* const ctx, const uint16_t x, const uint16_t y, const uint16_t c);
 
 /**
  * @brief 端点1 端点2 を結ぶ 線分を描画する.
@@ -42,7 +43,7 @@ inline static UError_t setPixel(const Canvas_t* const ctx, const uint32_t x, con
  * @param [in] c  : RGB565 形式の描画色
  * @return 処理結果
  */
-inline static UError_t setLine(const Canvas_t* const ctx, const uint32_t x1, const uint32_t y1, const uint32_t x2, const uint32_t y2, const uint16_t c);
+inline static UError_t setLine(const Canvas_t* const ctx, const uint16_t x1, const uint16_t y1, const uint16_t x2, const uint16_t y2, const uint16_t c);
 
 /**
  * @brief メモリから指定位置へデータの矩形転送を行う
@@ -57,8 +58,12 @@ inline static UError_t setLine(const Canvas_t* const ctx, const uint32_t x1, con
  * @param [in] sh : 転送元高さ
  * @return 処理結果
  */
-inline static UError_t blt(const Canvas_t* const ctx, uint32_t dx, uint32_t dy, const uint16_t* src, uint32_t sx, uint32_t sy, uint32_t stride, uint32_t sw,
-                           uint32_t sh);
+inline static UError_t blt(const Canvas_t* const ctx, uint16_t dx, uint16_t dy, const uint16_t* src, uint16_t sx, uint16_t sy, size_t stride, uint16_t sw,
+                           uint16_t sh);
+
+inline static UError_t transBlt(const Canvas_t* ctx, uint16_t dx, uint16_t dy, const uint16_t* src, uint16_t sx, uint16_t sy, size_t stride, uint16_t sw,
+                                uint16_t sh, uint16_t const trans);
+
 //////////////////////////////////////////////////////////////////////////////
 // variable
 //////////////////////////////////////////////////////////////////////////////
@@ -88,8 +93,8 @@ inline static UError_t clear(const Canvas_t* const ctx, const uint16_t c) {
   return err;
 }
 
-inline static UError_t blt(const Canvas_t* const ctx, uint32_t dx, uint32_t dy, const uint16_t* src, uint32_t sx, uint32_t sy, uint32_t stride, uint32_t sw,
-                           uint32_t sh) {
+inline static UError_t blt(const Canvas_t* const ctx, uint16_t dx, uint16_t dy, const uint16_t* src, uint16_t sx, uint16_t sy, size_t stride, uint16_t sw,
+                           uint16_t sh) {
   UError_t err = uSuccess;
 
   if (uSuccess == err) {
@@ -127,7 +132,40 @@ inline static UError_t blt(const Canvas_t* const ctx, uint32_t dx, uint32_t dy, 
   return err;
 }
 
-inline static UError_t setPixel(const Canvas_t* const ctx, const uint32_t x, const uint32_t y, const uint16_t c) {
+inline static UError_t transBlt(const Canvas_t* ctx, uint16_t dx, uint16_t dy, const uint16_t* src, uint16_t sx, uint16_t sy, size_t stride, uint16_t sw,
+                                uint16_t sh, uint16_t const trans) {
+  UError_t err = uSuccess;
+
+  if (uSuccess == err) {
+    if (NULL == ctx || NULL == ctx->buf || NULL == src) {
+      err = uFailure;
+    }
+  }
+
+  if (uSuccess == err) {
+    // 領域チェック
+    if (ctx->h <= dy || ctx->w <= dx) {
+      err = uFailure;
+    }
+  }
+
+  if (uSuccess == err) {
+    const uint16_t* base = src + (sy * (stride >> 1)) + sx;
+
+    for (uint16_t y = 0; y < sh; ++y) {
+      for (uint16_t x = 0; x < sw; ++x) {
+        if (trans != *(base + x)) {
+          setPixel(ctx, dx + x, dy + y, *(base + x));
+        }
+      }
+      base += (stride >> 1);
+    }
+  }
+
+  return err;
+}
+
+inline static UError_t setPixel(const Canvas_t* const ctx, const uint16_t x, const uint16_t y, const uint16_t c) {
   UError_t err = uSuccess;
 
   if (uSuccess == err) {
@@ -151,7 +189,7 @@ inline static UError_t setPixel(const Canvas_t* const ctx, const uint32_t x, con
   return err;
 }
 
-inline static UError_t setLine(const Canvas_t* const ctx, const uint32_t x1, const uint32_t y1, const uint32_t x2, const uint32_t y2, const uint16_t c) {
+inline static UError_t setLine(const Canvas_t* const ctx, const uint16_t x1, const uint16_t y1, const uint16_t x2, const uint16_t y2, const uint16_t c) {
   UError_t err = uSuccess;
 
   if (uSuccess == err) {
@@ -197,7 +235,7 @@ inline static UError_t setLine(const Canvas_t* const ctx, const uint32_t x1, con
   return err;
 }
 
-UError_t Canvas_Create(Canvas_t* ctx, uint32_t w, uint32_t h, size_t s, void* const buf) {
+UError_t Canvas_Create(Canvas_t* ctx, uint16_t w, uint16_t h, size_t s, void* const buf) {
   UError_t err = uSuccess;
 
   if (uSuccess == err) {
@@ -225,18 +263,51 @@ const void* Canvas_GetBuf(const Canvas_t* const ctx) {
 
 UError_t Canvas_Clear(const Canvas_t* const ctx, const uint16_t c) { return clear(ctx, c); }
 
-UError_t Canvas_Blt(const Canvas_t* const ctx, uint32_t dx, uint32_t dy, const uint16_t* src, uint32_t sx, uint32_t sy, uint32_t stride, uint32_t sw,
-                    uint32_t sh) {
+UError_t Canvas_Blt(const Canvas_t* const ctx, uint16_t dx, uint16_t dy, const uint16_t* src, uint16_t sx, uint16_t sy, size_t stride, uint16_t sw,
+                    uint16_t sh) {
   return blt(ctx, dx, dy, src, sx, sy, stride, sw, sh);
 }
 
-UError_t Canvas_DrawPixel(const Canvas_t* const ctx, const uint32_t x, const uint32_t y, const uint16_t c) { return setPixel(ctx, x, y, c); }
+UError_t Canvas_TextureBlt(const Canvas_t* ctx, uint16_t dx, uint16_t dy, const Texture_t* tex, uint16_t sx, uint16_t sy, uint16_t sw, uint16_t sh) {
+  UError_t err = uSuccess;
 
-UError_t Canvas_DrawLine(const Canvas_t* const ctx, const uint32_t x1, const uint32_t y1, const uint32_t x2, const uint32_t y2, const uint16_t c) {
+  if (uSuccess == err) {
+    if (NULL == ctx || NULL == tex) {
+      err = uFailure;
+    }
+  }
+
+  if (uSuccess == err) {
+    err = blt(ctx, dx, dy, tex->buf, sx, sy, tex->s, sw, sh);
+  }
+
+  return err;
+}
+
+UError_t Canvas_TextureTransBlt(const Canvas_t* ctx, uint16_t dx, uint16_t dy, const Texture_t* tex, uint16_t sx, uint16_t sy, uint16_t sw, uint16_t sh,
+                                uint16_t trans) {
+  UError_t err = uSuccess;
+
+  if (uSuccess == err) {
+    if (NULL == ctx || NULL == tex) {
+      err = uFailure;
+    }
+  }
+
+  if (uSuccess == err) {
+    err = transBlt(ctx, dx, dy, tex->buf, sx, sy, tex->s, sw, sh, trans);
+  }
+
+  return err;
+}
+
+UError_t Canvas_DrawPixel(const Canvas_t* const ctx, const uint16_t x, const uint16_t y, const uint16_t c) { return setPixel(ctx, x, y, c); }
+
+UError_t Canvas_DrawLine(const Canvas_t* const ctx, const uint16_t x1, const uint16_t y1, const uint16_t x2, const uint16_t y2, const uint16_t c) {
   return setLine(ctx, x1, y1, x2, y2, c);
 }
 
-UError_t Canvas_DrawCircle(const Canvas_t* const ctx, const uint32_t x, const uint32_t y, const uint32_t r, const uint16_t c) {
+UError_t Canvas_DrawCircle(const Canvas_t* const ctx, const uint16_t x, const uint16_t y, const uint16_t r, const uint16_t c) {
   UError_t err = uSuccess;
 
   if (uSuccess == err) {
@@ -276,7 +347,7 @@ UError_t Canvas_DrawCircle(const Canvas_t* const ctx, const uint32_t x, const ui
   return err;
 }
 
-UError_t Canvas_DrawFillCircle(const Canvas_t* const ctx, const uint32_t x, const uint32_t y, const uint32_t r, const uint16_t c) {
+UError_t Canvas_DrawFillCircle(const Canvas_t* const ctx, const uint16_t x, const uint16_t y, const uint16_t r, const uint16_t c) {
   UError_t err = uSuccess;
 
   if (uSuccess == err) {
@@ -312,4 +383,31 @@ UError_t Canvas_DrawFillCircle(const Canvas_t* const ctx, const uint32_t x, cons
     }  // while(cx >= ...
   }
   return err;
+}
+
+UError_t Canvas_DrawFont(const Canvas_t* canvas, const uint16_t posx, const uint16_t posy, const uint16_t color, const uint8_t* fgraph, const uint16_t fw,
+                         const uint16_t fh, const size_t fsz) {
+  UError_t err = uSuccess;
+  if (uSuccess == err) {
+    if (NULL == canvas || NULL == fgraph || 0 == fsz) {
+      err = uFailure;
+    }
+  }
+
+  if (uSuccess == err) {
+    // LOG_I("w[%d] h[%d] fsz[%d]", fw, fh, fsz);
+    const size_t fbw = (fw + (8u - 1u)) / 8u;  // フォントのバイト幅
+    const uint8_t* addr = fgraph;
+    for (uint32_t fy = 0; fy < fh; ++fy) {
+      for (uint32_t fx = 0; fx < fw; ++fx) {
+        const size_t bpos = (fx >> 3);       //(fx / 8);
+        const size_t bshift = (fx & 0b111);  //(fx % 8);
+        const uint8_t c = *(addr + bpos) << bshift;
+        if (c & 0b10000000) {
+          setPixel(canvas, posx + fx, posy + fy, color);
+        }
+      }
+      addr += fbw;
+    }
+  }
 }

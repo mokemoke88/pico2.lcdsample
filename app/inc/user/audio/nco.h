@@ -1,0 +1,95 @@
+/**
+ * @file prog01/app/inc/user/audio/nco.c
+ *
+ * @date 2024.11.04 k.shibata newly created
+ */
+
+#if !defined(USER_AUDIO_NCO_H__)
+#define USER_AUDIO_NCO_H__
+
+//////////////////////////////////////////////////////////////////////////////
+// includes
+//////////////////////////////////////////////////////////////////////////////
+
+#include <stddef.h>
+#include <stdint.h>
+
+//////////////////////////////////////////////////////////////////////////////
+// defines
+//////////////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////////////
+// typedef
+//////////////////////////////////////////////////////////////////////////////
+
+/**
+ * @brief 数値計算オシレータ
+ * 符号付 8bit 値を返すオシレータ構造体
+ */
+typedef struct tagNCO_t {
+  uint32_t weight;       //< 重み 16bit固定少数
+  uint32_t offset;       //< 現在値 16bit固定少数
+  const int8_t* wtable;  //< 8192要素のSIN値テーブル
+} NCO_t;
+
+//////////////////////////////////////////////////////////////////////////////
+// prototype
+//////////////////////////////////////////////////////////////////////////////
+
+#ifdef __cplusplus
+extern "C" {
+#endif  //__cplusplus
+
+/**
+ * @brief オシレータ構造体を初期化する
+ */
+UError_t NCO_Create(NCO_t* nco);
+
+/**
+ * @brief 値を取得する
+ */
+static inline int8_t NCO_Get(NCO_t* ctx);
+
+/**
+ * @brief NCOのWeight値を更新する
+ * @param ctx
+ * @param [in] weight : 16bit固定少数
+ */
+static inline void NCO_SetWeight(NCO_t* ctx, uint32_t weight);
+
+#ifdef __cplusplus
+}
+#endif  //__cplusplus
+
+//////////////////////////////////////////////////////////////////////////////
+// variable
+//////////////////////////////////////////////////////////////////////////////
+
+// extern const int8_t i8sin[8192];  //< 周期 8192 の 8ビット SINテーブル (-128 ... 0 ... 127)
+
+//////////////////////////////////////////////////////////////////////////////
+// function
+//////////////////////////////////////////////////////////////////////////////
+
+static inline int8_t NCO_Get(NCO_t* ctx) {
+  int8_t ret = 0;
+  if (NULL != ctx) {
+    ret = ctx->wtable[(ctx->offset >> 16)];
+    ctx->offset += ctx->weight;
+    ctx->offset &= ~(8192u << 16);
+  }
+  return ret;
+}
+
+/**
+ * @brief NCOのWeight値を更新する
+ * @param ctx
+ * @param [in] weight : 16bit固定少数
+ */
+static inline void NCO_SetWeight(NCO_t* ctx, uint32_t weight) {
+  if (NULL != ctx) {
+    ctx->weight = weight;
+  }
+}
+
+#endif  // USER_AUDIO_NCO_H__

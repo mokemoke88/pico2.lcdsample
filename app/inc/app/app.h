@@ -1,17 +1,26 @@
 /**
- * @file prog01/app/inc/user/utf8string.h
+ * @file prog01/app/inc/app/app.h
  *
- * @date 2024.10.12 k.shibata newly created
+ * @date 2024.10.27 k.shibata newly created
  */
+
+#if !defined(APP_APP_H__)
+#define APP_APP_H__
 
 //////////////////////////////////////////////////////////////////////////////
 // includes
 //////////////////////////////////////////////////////////////////////////////
 
+#include <user/types.h>
+
+#include <user/canvas.h>
+
+#include <user/cst328drv.h>
+#include <user/lcddrv.h>
+
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-
-#include <user/types.h>
 
 //////////////////////////////////////////////////////////////////////////////
 // defines
@@ -21,35 +30,38 @@
 // typedef
 //////////////////////////////////////////////////////////////////////////////
 
+typedef struct tagAppArg_t {
+  Canvas_t* frame;            //< キャンバスオブジェクト
+  LCDDrvHandle_t hLCD;        // LCDドライバオブジェクト(バックライト制御に使用)
+  const CST328Data_t* touch;  // タッチデバイス情報
+  const uint32_t frameCount;  // フレームカウント
+  uint8_t* audio_buff;        // オーディオ出力先
+  size_t audio_size;          // オーディオサイズ
+} AppArg_t;
+
+/**
+ * @brief アプリケーションオブジェクト
+ */
+typedef struct tagAppObject_t {
+  UError_t (*ActionFn)(struct tagAppObject_t*, const AppArg_t*);
+} AppObject_t;
+
 //////////////////////////////////////////////////////////////////////////////
 // prototype
 //////////////////////////////////////////////////////////////////////////////
 
 #ifdef __cplusplus
-extern "c" {
+extern "C" {
 #endif  //__cplusplus
 
-/**
- * UTF8文字列から先頭の1文字を表すUTF32キャラクタコードと読み進めたバイト数を返す.
- * @param [out] pUtf32 : キャラクタコード出力先
- * @param [out] pRead : 読み進めたバイト数の出力先
- *   @arg NULL : 出力しない
- *   @arg NULL以外 : 読み進めたバイト数を出力
- * @param [in] utf8s : 対象とするUTF8文字列
- * @param [in] length : 文字列のバイト数. 1以上必要
- * @return 処理結果.
- * @retval eSuccess : 処理成功. キャラクタコード, 読み進めたバイト数を出力する.
- * @retval eFailure : 処理失敗. 読み進めたバイト数のみ出力する.
- */
-UError_t UTF8String_ToUTF32(int32_t* pUtf32, size_t* pRead, const char* utf8s, size_t length);
+UError_t AppUpdate(AppObject_t* app, const AppArg_t* arg);
 
 /**
- * UTF32(UNICODE) 文字コードを SJIS文字コードに変換する.
- * 変換出来ない場合は0u を返す.
- * @param [in] utf32 : 変換対象の文字コード
- * @return 変換結果
+ * @brief 初期化
+ * @param
+ * @return
  */
-uint16_t UTF8String_UTF32toSJIS(int32_t utf32);
+AppObject_t AppInit(void);
 
 #ifdef __cplusplus
 }
@@ -62,3 +74,5 @@ uint16_t UTF8String_UTF32toSJIS(int32_t utf32);
 //////////////////////////////////////////////////////////////////////////////
 // function
 //////////////////////////////////////////////////////////////////////////////
+
+#endif  // APP_APP_H__

@@ -1,0 +1,103 @@
+/**
+ * @file prog01/app/src/texture.c
+ *
+ * @date 2024.10.26 k.shibata newly created
+ */
+
+//////////////////////////////////////////////////////////////////////////////
+// includes
+//////////////////////////////////////////////////////////////////////////////
+
+#include <user/texture.h>
+
+#include <user/types.h>
+
+#include <stddef.h>
+#include <stdint.h>
+
+//////////////////////////////////////////////////////////////////////////////
+// defines
+//////////////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////////////
+// typedef
+//////////////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////////////
+// prototype
+//////////////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////////////
+// variable
+//////////////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////////////
+// function
+//////////////////////////////////////////////////////////////////////////////
+
+UError_t Texture_Create(Texture_t* ctx, uint16_t w, uint16_t h, size_t s, const void* buf) {
+  UError_t err = uSuccess;
+
+  if (uSuccess == err) {
+    if (NULL == ctx) {
+      err = uFailure;
+    }
+  }
+
+  if (uSuccess == err) {
+    ctx->w = w;
+    ctx->h = h;
+    ctx->s = s;
+    ctx->buf = buf;
+  }
+
+  return err;
+}
+
+uint16_t Texture_GetPixel(const Texture_t* ctx, const uint16_t x, const uint16_t y) {
+  UError_t err = uSuccess;
+  uint16_t ret = 0u;
+
+  if (uSuccess == err) {
+    if (NULL == ctx || NULL == ctx->buf) {
+      err = uFailure;
+    }
+  }
+
+  if (uSuccess == err) {
+    if ((ctx->w >= x) || (ctx->h >= y)) {
+      err = uFailure;
+    }
+  }
+
+  if (uSuccess == err) {
+    ret = *(((const uint16_t*)ctx->buf) + ((y * ctx->s) + x));
+  }
+
+  if (uSuccess != err) {
+    ret = 0u;
+  }
+
+  return ret;
+}
+
+const void* Texutre_GetBuf(const Texture_t* ctx) {
+  UError_t err = uSuccess;
+  const void* ret = NULL;
+
+  if (uSuccess == err) {
+    if (NULL == ctx || NULL == ctx->buf) {
+      err = uFailure;
+    }
+  }
+
+  if (uSuccess == err) {
+    ret = ctx->buf;
+  }
+
+  if (uSuccess != err) {
+    ret = NULL;
+  }
+
+  return ret;
+}
