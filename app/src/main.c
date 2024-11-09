@@ -149,7 +149,7 @@ int main(void) {
     Canvas_t* frame = (frame_counter % 2) ? &canvas[0] : &canvas[1];  // 使用するCanvas(フレームバッファ)の選択
 
     const size_t audio_size = 2940;       // オーディオサンプル数
-    memset(audio_data, 0x0, audio_size);  // オーディオデータをフラットに
+    memset(audio_data, 0, audio_size);  // オーディオデータをフラットに
 
     CST328Drv_UpdateCoord(hTouch);  // タッチパッド情報(入力)を更新
     // TODO: 情報の抽象化: タッチパッド情報からアプリケーション入力情報への変換処理

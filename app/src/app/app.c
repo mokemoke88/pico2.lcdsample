@@ -111,19 +111,21 @@ static CirclePointer_t circleP = {.active = false, .red = 0xff, .green = 0x00, .
  * @brief NCOリソースの定義.
  * TODO: グローバルではなく, AppNormalに関連付ける
  */
-static NCO_t gNco[1];
+static NCO_t gNco[3];
 
 /**
  * @brief EGO パラメータ定義
  */
 static EGOParam_t gEgoParam = {
+#if 0
     .t_atk = 441 * 5,                                 // アタックタイム
     .d_atk = (65535 / 100 * 100) / (441 * 5),         // アタック増量 = ピーク / アタックタイム
     .t_decay = 441 * 3,                               // ディケイタイム
     .d_decay = ((65535 / 100 * 1) / (441 * 3)) * -1,  // ディケイ増量 = サスティーン音量 / ディケイタイム * -1
     .t_rel = 441 * 2,                                 // リリースタイム
     .d_rel = (65535 / 100 * 99) / (441 * 2) * -1,     // リリース増量 = サスティーン音量 / リリースタイム * -1
-};
+#endif
+    .l1 = 0, .l2 = 0, .l3 = 0, .l4 = 0, .r1 = 0, .r2 = 0, .r3 = 0, .r4 = 0};
 
 /**
  * @brief EGOリソースの定義
@@ -131,9 +133,8 @@ static EGOParam_t gEgoParam = {
  */
 static EGO_t gEgo[] = {{
     .param = &gEgoParam,
+    .state = EGO_STATE_FINISH,
     .v = 0,
-    .t = 0,
-    .isRel = true,
 }};
 
 /**
@@ -141,14 +142,49 @@ static EGO_t gEgo[] = {{
  * 遠き山に日は落ちて
  */
 static const uint32_t wd[] = {
-    U16_TONE_E4, U16_TONE_G4, U16_TONE_G4, U16_TONE_E4, U16_TONE_D4, U16_TONE_C4, U16_TONE_D4, U16_TONE_E4, U16_TONE_G4, U16_TONE_E4, U16_TONE_D4,
-    U16_TONE_E4, U16_TONE_G4, U16_TONE_G4, U16_TONE_E4, U16_TONE_D4, U16_TONE_C4, U16_TONE_D4, U16_TONE_E4, U16_TONE_D4, U16_TONE_C4, U16_TONE_C4,
+    U16_TONE_E4, U16_TONE_G4, U16_TONE_G4,
 
-    U16_TONE_A4, U16_TONE_C5, U16_TONE_C5, U16_TONE_B4, U16_TONE_G4, U16_TONE_A4, U16_TONE_A4, U16_TONE_C5, U16_TONE_B4, U16_TONE_G4, U16_TONE_A4,
-    U16_TONE_A4, U16_TONE_C5, U16_TONE_C5, U16_TONE_B4, U16_TONE_G4, U16_TONE_A4, U16_TONE_A4, U16_TONE_C5, U16_TONE_B4, U16_TONE_G4, U16_TONE_A4,
+    U16_TONE_E4, U16_TONE_D4, U16_TONE_C4,
 
-    U16_TONE_E4, U16_TONE_G4, U16_TONE_G4, U16_TONE_E4, U16_TONE_D4, U16_TONE_C4, U16_TONE_D4, U16_TONE_E4, U16_TONE_G4, U16_TONE_E4, U16_TONE_D4,
-    U16_TONE_E4, U16_TONE_G4, U16_TONE_G4, U16_TONE_C5, U16_TONE_D5, U16_TONE_E5, U16_TONE_D5, U16_TONE_C5, U16_TONE_D5, U16_TONE_A4, U16_TONE_C5,
+    U16_TONE_D4, U16_TONE_E4, U16_TONE_G4, U16_TONE_E4,
+
+    U16_TONE_D4,
+
+    U16_TONE_E4, U16_TONE_G4, U16_TONE_G4,
+
+    U16_TONE_E4, U16_TONE_D4, U16_TONE_C4,
+
+    U16_TONE_D4, U16_TONE_E4, U16_TONE_D4, U16_TONE_C4,
+
+    U16_TONE_C4,
+
+    U16_TONE_A4, U16_TONE_C5, U16_TONE_C5,
+
+    U16_TONE_B4, U16_TONE_G4, U16_TONE_A4,
+
+    U16_TONE_A4, U16_TONE_C5, U16_TONE_B4, U16_TONE_G4,
+
+    U16_TONE_A4,
+
+    U16_TONE_A4, U16_TONE_C5, U16_TONE_C5,
+
+    U16_TONE_B4, U16_TONE_G4, U16_TONE_A4,
+
+    U16_TONE_A4, U16_TONE_C5, U16_TONE_B4, U16_TONE_G4,
+
+    U16_TONE_A4,
+
+    U16_TONE_E4, U16_TONE_G4, U16_TONE_G4,
+
+    U16_TONE_E4, U16_TONE_D4, U16_TONE_C4,
+
+    U16_TONE_D4, U16_TONE_E4, U16_TONE_G4, U16_TONE_E4, U16_TONE_D4,
+
+    U16_TONE_E4, U16_TONE_G4, U16_TONE_G4,
+
+    U16_TONE_C5, U16_TONE_D5, U16_TONE_E5,
+
+    U16_TONE_D5, U16_TONE_C5, U16_TONE_D5, U16_TONE_A4, U16_TONE_C5,
 };
 
 /**
@@ -164,8 +200,59 @@ typedef struct tagMMD_t {
   uint32_t length;  // 長さ 44100 で全音符としようか?
 } MMD_t;
 
+#define QUAT_TLEN (22050U * (88.0 / 60.0))
+
 static MMD_t fumen[] = {
-    {U16_TONE_C4, 220500u}, {U16_TONE_D4, 220500u}, {U16_TONE_E4, 220500u}, {U16_TONE_F4, 220500u}, {U16_TONE_G4, 220500u},
+    {U16_TONE_E4, QUAT_TLEN * 1.5}, {U16_TONE_G4, QUAT_TLEN * 0.5}, {U16_TONE_G4, QUAT_TLEN * 2.0},
+
+    {U16_TONE_E4, QUAT_TLEN * 1.5}, {U16_TONE_D4, QUAT_TLEN * 0.5}, {U16_TONE_C4, QUAT_TLEN * 2.0},
+
+    {U16_TONE_D4, QUAT_TLEN * 1.5}, {U16_TONE_E4, QUAT_TLEN * 0.5}, {U16_TONE_G4, QUAT_TLEN * 1.5}, {U16_TONE_E4, QUAT_TLEN * 0.5},
+
+    {U16_TONE_D4, QUAT_TLEN * 3.0}, {0, QUAT_TLEN * 1.0},
+
+    {U16_TONE_E4, QUAT_TLEN * 1.5}, {U16_TONE_G4, QUAT_TLEN * 0.5}, {U16_TONE_G4, QUAT_TLEN * 2.0},
+
+    {U16_TONE_E4, QUAT_TLEN * 1.5}, {U16_TONE_D4, QUAT_TLEN * 0.5}, {U16_TONE_C4, QUAT_TLEN * 2.0},
+
+    {U16_TONE_D4, QUAT_TLEN * 1.5}, {U16_TONE_E4, QUAT_TLEN * 0.5}, {U16_TONE_D4, QUAT_TLEN * 1.5}, {U16_TONE_C4, QUAT_TLEN * 0.5},
+
+    {U16_TONE_C4, QUAT_TLEN * 3.0}, {0, QUAT_TLEN * 1.0},
+
+    {U16_TONE_A4, QUAT_TLEN * 1.5}, {U16_TONE_C5, QUAT_TLEN * 0.5}, {U16_TONE_C5, QUAT_TLEN * 2.0},
+
+    {U16_TONE_B4, QUAT_TLEN * 1.0}, {U16_TONE_G4, QUAT_TLEN * 1.0}, {U16_TONE_A4, QUAT_TLEN * 2.0},
+
+    {U16_TONE_A4, QUAT_TLEN * 1.0}, {U16_TONE_C5, QUAT_TLEN * 1.0}, {U16_TONE_B4, QUAT_TLEN * 1.0}, {U16_TONE_G4, QUAT_TLEN * 1.0},
+
+    {U16_TONE_A4, QUAT_TLEN * 3.0}, {0, QUAT_TLEN * 1.0},
+
+    {U16_TONE_A4, QUAT_TLEN * 1.5}, {U16_TONE_C5, QUAT_TLEN * 0.5}, {U16_TONE_C5, QUAT_TLEN * 2.0},
+
+    {U16_TONE_B4, QUAT_TLEN * 1.0}, {U16_TONE_G4, QUAT_TLEN * 1.0}, {U16_TONE_A4, QUAT_TLEN * 2.0},
+
+    {U16_TONE_A4, QUAT_TLEN * 1.0}, {U16_TONE_C5, QUAT_TLEN * 1.0}, {U16_TONE_B4, QUAT_TLEN * 1.0}, {U16_TONE_G4, QUAT_TLEN * 1.0},
+
+    {U16_TONE_A4, QUAT_TLEN * 3.0}, {0, QUAT_TLEN * 1.0},
+
+    {U16_TONE_E4, QUAT_TLEN * 1.5}, {U16_TONE_G4, QUAT_TLEN * 0.5}, {U16_TONE_G4, QUAT_TLEN * 2.0},
+
+    {U16_TONE_E4, QUAT_TLEN * 1.5}, {U16_TONE_D4, QUAT_TLEN * 0.5}, {U16_TONE_C4, QUAT_TLEN * 2.0},
+
+    {U16_TONE_D4, QUAT_TLEN * 1.5}, {U16_TONE_E4, QUAT_TLEN * 0.5}, {U16_TONE_G4, QUAT_TLEN * 1.5}, {U16_TONE_E4, QUAT_TLEN * 0.5},
+
+    {U16_TONE_D4, QUAT_TLEN * 4.0},
+
+    {U16_TONE_E4, QUAT_TLEN * 1.5}, {U16_TONE_G4, QUAT_TLEN * 0.5}, {U16_TONE_G4, QUAT_TLEN * 2.0},
+
+    {U16_TONE_C5, QUAT_TLEN * 1.5}, {U16_TONE_D5, QUAT_TLEN * 0.5}, {U16_TONE_E5, QUAT_TLEN * 2.0},
+
+    {U16_TONE_D5, QUAT_TLEN * 1.5}, {U16_TONE_C5, QUAT_TLEN * 0.5}, {U16_TONE_D5, QUAT_TLEN * 1.0}, {U16_TONE_A4, QUAT_TLEN * 1.0},
+
+    {U16_TONE_C5, QUAT_TLEN * 4.0},
+
+    {0, QUAT_TLEN * 4.0}
+
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -322,8 +409,10 @@ static UError_t Render(Canvas_t const* canvas, const uint32_t f, CirclePointer_t
 static UError_t AppNormal_(AppObject_t* app, const AppArg_t* arg) {
   UError_t err = uSuccess;
   static uint32_t framecnt = 0u;
-  static size_t wf = 0;
-  static bool audio_act = false;
+
+  static size_t fumen_pos = 0u;   // 譜面の位置
+  static size_t onpu_pos = 0u;    // 音符の再生位置
+  static bool audio_act = false;  // 音声有効フラグ
 
   if (uSuccess == err) {
     if (NULL == app || NULL == arg || NULL == arg->frame || NULL == arg->touch) {
@@ -354,9 +443,14 @@ static UError_t AppNormal_(AppObject_t* app, const AppArg_t* arg) {
     }
 
     if (arg->touch->points > 0) {
-      wf = 0u;
-      NCO_SetWeight(&gNco[0], wd[wf]);
+      // 譜面位置を 先頭変更
+      fumen_pos = 0;
+      onpu_pos = 0;  // 音符の位置も0に
+      NCO_SetWeight(&gNco[0], fumen[fumen_pos].tone);
+      NCO_SetWeight(&gNco[1], fumen[fumen_pos].tone * 0.5);
+      NCO_SetWeight(&gNco[2], fumen[fumen_pos].tone << 1);
       EGO_NoteOn(&gEgo[0]);
+
       framecnt = 0;
       audio_act = true;
     }
@@ -372,30 +466,49 @@ static UError_t AppNormal_(AppObject_t* app, const AppArg_t* arg) {
 
   // 譜面再生
   if (uSuccess == err && true == audio_act) {
-    static uint32_t wp = 0u;
-    static uint32_t wlen = 15;  // 15 = 60秒, 四分音符とすると テンポ 60
+    // static uint32_t wp = 0u;
+    // static uint32_t wlen = 15;  // 15 = 60秒, 四分音符とすると テンポ 60
 
     size_t remain = arg->audio_size;  // 出力残り
 
     for (size_t i = 0; i < remain; ++i) {
-      int32_t tone = NCO_Get(&gNco[0]);  // -127 - 0 - + 127 が入っているとする
-      int32_t env = EGO_Get(&gEgo[0]);   // 0 - 1 = (0 - 65536) とする.
-      // エンベロープとNCOを掛け合わせ, サンプル値を決定
-      arg->audio_buff[i] = 0xff & (127 + ((tone * env) >> 16));
-    }
-
-    wlen--;
-
-    // 15フレーム = 1秒経過でトーン変更
-    if (0 == wlen) {
-      wf++;
-      wf %= sizeof(wd) / sizeof(wd[0]);
-      NCO_SetWeight(&gNco[0], wd[wf]);
-      EGO_NoteOn(&gEgo[0]);
-      wlen = 15;
-      if (0 == wf) {
-        audio_act = false;
+      // 音符終端の場合は次の音符に移動
+      if (fumen[fumen_pos].length == onpu_pos) {
+        onpu_pos = 0;
+        // 次の音符
+        fumen_pos++;
+        if (fumen_pos >= sizeof(fumen) / sizeof(fumen[0])) {
+          // 終端なので, 再生終了
+          // TODO: NOTE off にして, 音なくなるまで何とかしたい.
+          fumen_pos = 0;
+          audio_act = false;
+        } else {
+          if (fumen[fumen_pos].tone == 0) {
+            // tone 0 = 休符扱い
+            EGO_NoteOff(&gEgo[0]);
+          } else {
+            NCO_SetWeight(&gNco[0], fumen[fumen_pos].tone);
+            NCO_SetWeight(&gNco[1], fumen[fumen_pos].tone * 0.5);
+            NCO_SetWeight(&gNco[2], fumen[fumen_pos].tone << 1);
+            EGO_NoteOn(&gEgo[0]);
+          }
+        }
       }
+
+      int32_t tone0 = NCO_Get(&gNco[0]);  // -127 - 0 - + 127 が入っているとする
+      int32_t tone1 = NCO_Get(&gNco[1]);
+      int32_t tone2 = NCO_Get(&gNco[2]);
+      int32_t env = EGO_Get(&gEgo[0]);  // 0 - 1 = (0 - 65536) とする.
+      // エンベロープとNCOを掛け合わせ, サンプル値を決定
+      int32_t s0 = (tone0 * env); // -8323072 - +8323072 // -127 - + 127
+      int32_t s1 = (tone1 * env); // -8323072 - +8323072 // -127 - + 127
+      int32_t s2 = (tone2 * env); // -8323072 - +8323072 // -127 - + 127
+
+      // ミキシング
+      int32_t mux = (s0 + s0 + s1 + s2) >> 2 >> 16;
+      arg->audio_buff[i] = 0xff & (128 + (int)(-127.0 > mux ? -127 : 127 < mux ? 127 : mux));
+      // arg->audio_buff[i] = 0xff & (128 + ((tone * env) >> 16));
+      onpu_pos++;
     }
   }
 
@@ -467,7 +580,9 @@ AppObject_t AppInit(void) {
   Texture_Create(&texWallpaper, 240, 320, 480, &wallpaper[12]);
   Texture_Create(&texWait, 192, 48, 192 * 2, &wait_icon[12]);
   NCO_Create(&gNco[0]);
-  EGOParam_Create(&gEgoParam, 65535, 441 * 5, 441 * 5, 65535 * 0.95, 441 * 5);
+  NCO_Create(&gNco[1]);
+  NCO_Create(&gNco[2]);
+  EGOParam_Create(&gEgoParam, 65536.0 * 1.0, 44, 441.0 * 50.0, 65536.0 * 0.75, 441 * 300.0);
 
   AppObject_t app = {
       .ActionFn = &AppInitial_,

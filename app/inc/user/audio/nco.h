@@ -76,7 +76,7 @@ static inline int8_t NCO_Get(NCO_t* ctx) {
   if (NULL != ctx) {
     ret = ctx->wtable[(ctx->offset >> 16)];
     ctx->offset += ctx->weight;
-    ctx->offset &= ~(8192u << 16);
+    ctx->offset %= (8192u << 16);
   }
   return ret;
 }

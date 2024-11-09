@@ -38,18 +38,7 @@
 // function
 //////////////////////////////////////////////////////////////////////////////
 
-/**
- * @brief エンベロープジェネレータのパラメータを出力します.
- * ピーク音量(0-65535), アタックタイム(単位:サンプル), ディケイタイム(単位:サンプル), サスティーン音量(0-65535)
- * リリースタイム(単位:サンプル) を入力として パラメータを出力します
- * @param [out] param : パラメータ出力先
- * @param [in] peak : ピーク音量 (0-65535) 最大音量(0-65535 = 0.0 ... 1.0)
- * @param [in] atk : アタック時間 キーオンからピーク音量までの到達時間(単位: サンプル)
- * @param [in] decay : アタック時間到達後, 持続音量(サスティーン音量) までの到達時間(単位:サンプル)
- * @param [in] sus : 持続音量 (0-65535) (0-65535 = 0.0 ... 1.0)
- * @param [in] rel : キーオフで, サスティーン音量から音量が0になるまでの時間(単位:サンプル)
- */
-UError_t EGOParam_Create(EGOParam_t* param, uint32_t peak, uint32_t atk, uint32_t decay, uint32_t sus, uint32_t rel) {
+UError_t EGOParam_Create(EGOParam_t* param, int32_t peak, int32_t atk, int32_t decay, int32_t sus, int32_t rel) {
   UError_t err = uSuccess;
   if (uSuccess == err) {
     if (NULL == param) {
@@ -58,12 +47,36 @@ UError_t EGOParam_Create(EGOParam_t* param, uint32_t peak, uint32_t atk, uint32_
   }
 
   if (uSuccess == err) {
-    param->d_atk = peak / atk;
-    param->t_atk = atk;
-    param->d_decay = ((peak - sus) / decay) * -1;
-    param->t_decay = decay;
-    param->d_rel = (sus / rel) * -1;
-    param->t_rel = rel;
+    if (65536 < peak || 0 > peak) {
+      err = uFailure;
+    }
+    if (65536 < sus || 0 > sus) {
+      err = uFailure;
+    }
+    if (0 >= atk) {
+      err = uFailure;
+    }
+    if (0 >= decay) {
+      err = uFailure;
+    }
+    if (0 >= rel) {
+      err = uFailure;
+    }
+    if (sus > peak) {
+      err = uFailure;
+    }
+  }
+
+  if (uSuccess == err) {
+    // 内部は10bit固定少数
+    param->l4 = 0;
+    param->l1 = peak << 10;
+    param->l2 = sus << 10;
+    param->l3 = sus << 10;
+    param->r1 = (param->l1 - param->l4) / atk;
+    param->r2 = (param->l2 - param->l1) / decay;
+    param->r3 = 0;
+    param->r4 = (param->l4 - param->l3) / rel;
   }
 
   return err;
@@ -80,26 +93,62 @@ uint32_t EGO_Get(EGO_t* ctx) {
   }
 
   if (uSuccess == err) {
-    ret = ctx->v;
+    // 出力をクリップ
+    ret = (ctx->v >> 10);
+    ret = (ret > 65536) ? 65536 : (ret < 0) ? 0 : ret;
 
-    // リリース状態の場合, d_relに従って増加(減少)
-    if (ctx->isRel) {
-      ctx->v += ctx->param->d_rel;
-      if (0 > ctx->v) {
-        ctx->v = 0;
-      }
-    } else {
-      if ((ctx->t) < (ctx->param->t_atk)) {
-        // atk 区間なら d_atk 分 増量(減少)
-        ctx->v += ctx->param->d_atk;
-      } else if ((ctx->t) < (ctx->param->t_atk + ctx->param->t_decay)) {
-        // decay 区間なら d_decay 分 増量(減少)
-        ctx->v += ctx->param->d_decay;
-      }
+    // 状態更新
+    switch (ctx->state) {
+      case EGO_STATE_T1: {
+        ctx->v += ctx->param->r1;
+        // 遷移条件の確認と遷移
+        if (ctx->v >= ctx->param->l1) {
+          ctx->v = ctx->param->l1;
+          ctx->state = (0 != ctx->param->r2) ? EGO_STATE_T2 : (0 != ctx->param->r3) ? EGO_STATE_T3 : EGO_STATE_T4;
+        }
+      } break;
+      case EGO_STATE_T2: {
+        ctx->v += ctx->param->r2;
+        // 遷移条件の確認と遷移
+        if (0 < ctx->param->r2) {
+          if (ctx->v >= ctx->param->l2) {
+            ctx->v = ctx->param->l2;
+            ctx->state = (0 != ctx->param->r3) ? EGO_STATE_T3 : EGO_STATE_T4;
+          }
+        } else {
+          if (ctx->v <= ctx->param->l2) {
+            ctx->v = ctx->param->l2;
+            ctx->state = (0 != ctx->param->r3) ? EGO_STATE_T3 : EGO_STATE_T4;
+          }
+        }
+      } break;
+      case EGO_STATE_T3: {
+        ctx->v += ctx->param->r3;
+        // 遷移条件の確認と遷移
+        if (0 < ctx->param->r3) {
+          if (ctx->v >= ctx->param->l3) {
+            ctx->v = ctx->param->l3;
+            ctx->state = EGO_STATE_T4;
+          }
+        } else {
+          if (ctx->v <= ctx->param->l3) {
+            ctx->v = ctx->param->l3;
+            ctx->state = EGO_STATE_T4;
+          }
+        }
+      } break;
+      case EGO_STATE_T4: {
+        ctx->v += ctx->param->r4;
+        // 遷移条件の確認と遷移
+        if (ctx->v <= ctx->param->l4) {
+          ctx->v = ctx->param->l4;
+          ctx->state = EGO_STATE_FINISH;
+        }
+      } break;
+      default:
+        break;
     }
-    ++ctx->t;
   }
-
   return ret;
 }
 
@@ -113,9 +162,7 @@ void EGO_NoteOn(EGO_t* ctx) {
   }
 
   if (uSuccess == err) {
-    ctx->t = 0;
-    ctx->v = 0;
-    ctx->isRel = false;
+    ctx->state = EGO_STATE_T1;
   }
 }
 
@@ -129,6 +176,8 @@ void EGO_NoteOff(EGO_t* ctx) {
   }
 
   if (uSuccess == err) {
-    ctx->isRel = true;
+    if (EGO_STATE_FINISH != ctx->state) {
+      ctx->state = EGO_STATE_T4;
+    }
   }
 }
