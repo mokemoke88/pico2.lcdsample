@@ -2,7 +2,7 @@
  * @file prog01/app/inc/user/audio.h
  *
  * オーディオ関連のコンビニヘッダ
- * 
+ *
  * @date 2024.11.04 k.shibata newly created
  */
 
@@ -14,6 +14,7 @@
 
 #include <user/audio/ego.h>
 #include <user/audio/nco.h>
+#include <user/audio/score.h>
 
 //////////////////////////////////////////////////////////////////////////////
 // defines
@@ -35,4 +36,4 @@
 // function
 //////////////////////////////////////////////////////////////////////////////
 
-#endif //USER_AUDIO_H__
+#endif  // USER_AUDIO_H__

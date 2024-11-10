@@ -65,8 +65,6 @@ static inline void NCO_SetWeight(NCO_t* ctx, uint32_t weight);
 // variable
 //////////////////////////////////////////////////////////////////////////////
 
-// extern const int8_t i8sin[8192];  //< 周期 8192 の 8ビット SINテーブル (-128 ... 0 ... 127)
-
 //////////////////////////////////////////////////////////////////////////////
 // function
 //////////////////////////////////////////////////////////////////////////////
@@ -81,11 +79,6 @@ static inline int8_t NCO_Get(NCO_t* ctx) {
   return ret;
 }
 
-/**
- * @brief NCOのWeight値を更新する
- * @param ctx
- * @param [in] weight : 16bit固定少数
- */
 static inline void NCO_SetWeight(NCO_t* ctx, uint32_t weight) {
   if (NULL != ctx) {
     ctx->weight = weight;

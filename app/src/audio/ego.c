@@ -38,7 +38,7 @@
 // function
 //////////////////////////////////////////////////////////////////////////////
 
-UError_t EGOParam_Create(EGOParam_t* param, int32_t peak, int32_t atk, int32_t decay, int32_t sus, int32_t rel) {
+UError_t EGOParam_Create(EGOParam_t* param, int32_t peak, int32_t sus, int32_t atk, int32_t decay,  int32_t rel) {
   UError_t err = uSuccess;
   if (uSuccess == err) {
     if (NULL == param) {
