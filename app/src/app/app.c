@@ -105,7 +105,8 @@ static EGO_t gEgo[] = {{
  */
 static NCO_t gNco[3];
 
-static AudioScore_t gAudioScore;
+static AudioScore_t gAudioScore[2];
+static AudioScore_t* gpCurAudioScore = NULL;
 
 //////////////////////////////////////////////////////////////////////////////
 // function
@@ -290,9 +291,14 @@ static UError_t AppNormal_(AppObject_t* app, const AppArg_t* arg) {
       LCDDrv_SetBrightness(arg->hLCD, ((uint32_t)0xff * b) >> 7);
     }
 
-    if (arg->touch->points > 0) {
+    if (arg->touch->points > 0 && !audio_act) {
       // タッチ/クリックされている場合, 譜面再生開始
-      AudioScore_Init(&gAudioScore);
+      if (&gAudioScore[0] == gpCurAudioScore) {
+        gpCurAudioScore = &gAudioScore[1];
+      } else {
+        gpCurAudioScore = &gAudioScore[0];
+      }
+      AudioScore_Init(gpCurAudioScore);
       audio_act = true;
     }
   }
@@ -310,13 +316,13 @@ static UError_t AppNormal_(AppObject_t* app, const AppArg_t* arg) {
     size_t remain = arg->audio_size;  // 出力残り
 
     for (size_t i = 0; i < remain; ++i) {
-      if (AudioScore_IsFinished(&gAudioScore)) {
+      if (AudioScore_IsFinished(gpCurAudioScore)) {
         // 譜面終了
         audio_act = false;
-      } else if (AudioScore_IsNoteChanged(&gAudioScore)) {
+      } else if (AudioScore_IsNoteChanged(gpCurAudioScore)) {
         // 次の音符
         AudioNote_t note;
-        AudioScore_GetNote(&gAudioScore, &note);
+        AudioScore_GetNote(gpCurAudioScore, &note);
         if (0u == note.tone) {
           EGO_NoteOff(&gEgo[0]);
         } else {
@@ -352,7 +358,7 @@ static UError_t AppNormal_(AppObject_t* app, const AppArg_t* arg) {
       // 0 - 255 (0x00 - 0xff) にクリップして出力
       arg->audio_buff[i] = 0xff & (128 + (int)(-127 > mux ? -127 : 127 < mux ? 127 : mux));
 
-      AudioScore_Step(&gAudioScore);
+      AudioScore_Step(gpCurAudioScore);
     }
   }
 
@@ -436,7 +442,8 @@ AppObject_t AppInit(void) {
   EGOParam_Create(&gEgoParam, 65536.0 * 1.0, 65536.0 * 0.75, 441, 441.0 * 50.0, 441 * 300.0);
 
   // 譜面データ作成
-  AudioScore_Create(&gAudioScore, Notes1, sizeof(Notes1) / sizeof(Notes1[0]));
+  AudioScore_Create(&gAudioScore[0], Notes0, sizeof(Notes0) / sizeof(Notes0[0]));
+  AudioScore_Create(&gAudioScore[1], Notes1, sizeof(Notes1) / sizeof(Notes1[0]));
 
   AppObject_t app = {
       // 初期状態をAppInitial_ に設定
