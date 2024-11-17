@@ -12,6 +12,7 @@
 // includes
 //////////////////////////////////////////////////////////////////////////////
 
+#include <user/audio/audiocontext.h>
 #include <user/audio/ego.h>
 #include <user/audio/nco.h>
 #include <user/audio/score.h>

@@ -24,6 +24,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <stdio.h>
+
 #include <user/macros.h>
 
 //////////////////////////////////////////////////////////////////////////////
@@ -33,6 +35,16 @@
 //////////////////////////////////////////////////////////////////////////////
 // typedef
 //////////////////////////////////////////////////////////////////////////////
+
+/**
+ * @brief 矩形表現
+ */
+typedef struct tagRect_t {
+  int32_t x;
+  int32_t y;
+  int32_t w;
+  int32_t h;
+} Rect_t;
 
 typedef struct tagCirclePointer_t {
   uint16_t x;
@@ -64,9 +76,90 @@ typedef struct tagSlider_t {
   uint8_t pos;
 } Slider_t;
 
+/**
+ * @brief 位置イベント条件
+ */
+typedef struct tagHitEvent_t {
+  Rect_t hitbox;                         //< 範囲条件, この範囲に入力が入った際にイベントハンドラを実行
+  UError_t (*doEvent)(const void* arg);  //< イベントハンドラ
+} HitEvent_t;
+
 //////////////////////////////////////////////////////////////////////////////
 // prototype
 //////////////////////////////////////////////////////////////////////////////
+
+/**
+ * @brief サークルポインタのイベント処理
+ * 活性時: 15フレームかけて半径を2づつ増加し, 15フレーム後 非活性状態となる
+ * 非活性時: イベントが有効な場合, イベント位置を自身の位置とし活性状態に遷移する
+ * @param [in] self : 操作対象
+ * @param [in] event : イベント情報
+ */
+void CirclePointer_Event(CirclePointer_t* self, const CirclePointerEvent_t* event);
+
+/**
+ * @brief サークルポインタの描画処理
+ * 活性時: 描画する
+ * 非活性時: 描画しない
+ * @param [in] self : 操作対象
+ * @param [in] canvas : 描画に使用するリソース
+ */
+void CirclePointer_Render(CirclePointer_t* self, const Canvas_t* canvas);
+
+/**
+ * @brief スライダーのイベント処理
+ * 入力が自身の入力範囲内なら, 自身のポイント情報を更新する
+ * @param self
+ * @param absX
+ * @param absY
+ */
+void Slider_Event(Slider_t* self, uint16_t absX, uint16_t absY);
+
+/**
+ * @brief スライダーのポイント情報を取得する
+ * @param self
+ * @return
+ */
+uint8_t Slider_GetPosition(Slider_t* self);
+
+/**
+ * @brief スライダーの描画処理
+ * 描画位置に矩形枠とポイント位置を塗りつぶし円で描画する
+ * @param self
+ * @param canvas
+ */
+void Slider_Render(Slider_t* self, const Canvas_t* canvas);
+
+/**
+ * @brief 位置入力 イベントハンドラ
+ * @param [in] arg : 引数
+ * @return 処理結果
+ */
+UError_t regionEvent_Top(const void* arg);
+
+/**
+ * @brief 位置入力 イベントハンドラ
+ * @param [in] arg : 引数
+ * @return 処理結果
+ */
+UError_t regionEvent_Middle(const void* arg);
+
+/**
+ * @brief 入力位置に応じた範囲イベントを実行します
+ * @param [in] x : 入力座標
+ * @param [in] y : 入力座標
+ * @param [in] eventArg : イベントハンドラへの引数
+ * @param [in] events : イベントハンドラ配列
+ * @param [in] numEvents : イベントハンドラ数
+ * @return 処理結果
+ */
+UError_t doRegionEvent(int32_t const x, int32_t const y, const void* eventArg, const HitEvent_t events[], size_t const numEvents);
+
+// 音声データ処理ハンドラ
+
+static void noteOffHandler(uint32_t tone, EGO_t* egos, NCO_t* ncos);
+static void noteOnHandler(uint32_t tone, EGO_t* egos, NCO_t* ncos);
+static uint8_t outputHandler(EGO_t* egos, NCO_t* ncos);
 
 //////////////////////////////////////////////////////////////////////////////
 // variable
@@ -81,6 +174,7 @@ static Texture_t texWallpaper = {0};
 
 // スライダー
 static Slider_t sliderP = {.x = 240 - 16 - 16, .y = 32, .w = 16, .h = 320 - 32 - 32, .pos = 127};
+
 // 円ポインタ
 static CirclePointer_t circleP = {.active = false, .red = 0xff, .green = 0x00, .blue = 0x00};
 
@@ -105,20 +199,58 @@ static EGO_t gEgo[] = {{
  */
 static NCO_t gNco[3];
 
+/**
+ * @brief 楽譜
+ */
 static AudioScore_t gAudioScore[2];
-static AudioScore_t* gpCurAudioScore = NULL;
+
+/**
+ * @brief オーディオコンテキスト定義
+ */
+static AudioContext_t gAuidoContext = {
+    .enable = false,                           //< 出力状態
+    .ncos = gNco,                              //< 使用するNCO
+    .numNco = sizeof(gNco) / sizeof(gNco[0]),  //< NCO要素数
+    .egos = gEgo,                              //< 使用するEGO
+    .numEgo = sizeof(gEgo) / sizeof(gEgo[0]),  //< EGO要素数
+                                               //    .scores = gAudioScore,                                     //< 楽譜
+                                               //    .numScore = sizeof(gAudioScore) / sizeof(gAudioScore[0]),  //< 楽譜数
+    .curScore = NULL,                          //< 選択している楽譜
+    .noteOffFn = &noteOffHandler,
+    .noteOnFn = &noteOnHandler,
+    .outputFn = &outputHandler,
+};
+
+/**
+ * @brief 入力イベント配列
+ */
+static HitEvent_t gRegionEvent[] = {
+    {
+        {
+            .x = 0,
+            .y = 0,
+            .w = 240,
+            .h = 120,
+        },
+        &regionEvent_Top,
+    },
+    {
+        {
+            .x = 0,
+            .y = 240,
+            .w = 240,
+            .h = 120,
+        },
+        &regionEvent_Middle,
+    },
+};
 
 //////////////////////////////////////////////////////////////////////////////
 // function
 //////////////////////////////////////////////////////////////////////////////
 
-/**
- * @brief サークルポインタのイベント処理
- * 活性時: 15フレームかけて半径を2づつ増加し, 15フレーム後 非活性状態となる
- * 非活性時: イベントが有効な場合, イベント位置を自身の位置とし活性状態に遷移する
- * @param [in] self : 操作対象
- * @param [in] event : イベント情報
- */
+// 円形ポインタ /////////////////////////////
+
 void CirclePointer_Event(CirclePointer_t* self, const CirclePointerEvent_t* event) {
   if (!self->active && event->enable) {
     self->x = event->x;
@@ -136,26 +268,16 @@ void CirclePointer_Event(CirclePointer_t* self, const CirclePointerEvent_t* even
   }
 }
 
-/**
- * @brief サークルポインタの描画処理
- * 活性時: 描画する
- * 非活性時: 描画しない
- * @param [in] self : 操作対象
- * @param [in] canvas : 描画に使用するリソース
- */
 void CirclePointer_Render(CirclePointer_t* self, const Canvas_t* canvas) {
   if (self->active) {
     Canvas_DrawCircle(canvas, self->x, self->y, self->r, RGB888toRGB565(self->red, self->green, self->blue));
   }
 }
 
-/**
- * @brief スライダーのイベント処理
- * 入力が自身の入力範囲内なら, 自身のポイント情報を更新する
- * @param self
- * @param absX
- * @param absY
- */
+// 円形ポインタ /////////////////////////////
+
+// スライダー /////////////////////////////
+
 void Slider_Event(Slider_t* self, uint16_t absX, uint16_t absY) {
   // if(self->x > absX){
   //   return;
@@ -177,11 +299,6 @@ void Slider_Event(Slider_t* self, uint16_t absX, uint16_t absY) {
   self->pos = ((absY - self->y) << 7) / self->h;
 }
 
-/**
- * @brief スライダーのポイント情報を取得する
- * @param self
- * @return
- */
 uint8_t Slider_GetPosition(Slider_t* self) {
   if (NULL == self) {
     return 0u;
@@ -189,12 +306,6 @@ uint8_t Slider_GetPosition(Slider_t* self) {
   return self->pos;
 }
 
-/**
- * @brief スライダーの描画処理
- * 描画位置に矩形枠とポイント位置を塗りつぶし円で描画する
- * @param self
- * @param canvas
- */
 void Slider_Render(Slider_t* self, const Canvas_t* canvas) {
   if (NULL == self) {
     return;
@@ -210,6 +321,8 @@ void Slider_Render(Slider_t* self, const Canvas_t* canvas) {
 
   Canvas_DrawFillCircle(canvas, self->x + (self->w / 2), y, 8, RGB888toRGB565(0xff, 0, 0));
 }
+
+// スライダー /////////////////////////////
 
 #if 0
 /**
@@ -253,6 +366,128 @@ static UError_t Render(Canvas_t const* canvas, const uint32_t f, CirclePointer_t
 }
 #endif
 
+UError_t regionEvent_Top(const void* arg) {
+  UError_t err = uSuccess;
+  AudioContext_t* ctx = (AudioContext_t*)arg;
+
+  if (uSuccess == err) {
+    if (NULL == ctx) {
+      err = uFailure;
+    }
+  }
+
+  if (uSuccess == err) {
+    if (!ctx->enable) {
+      AudioScore_Init(&gAudioScore[0]);
+      AudioContext_SetScore(ctx, &gAudioScore[0]);
+      ctx->enable = true;
+    }
+  }
+
+  return err;
+}
+
+UError_t regionEvent_Middle(const void* arg) {
+  UError_t err = uSuccess;
+  AudioContext_t* ctx = (AudioContext_t*)arg;
+
+  if (uSuccess == err) {
+    if (NULL == ctx) {
+      err = uFailure;
+    }
+  }
+
+  if (uSuccess == err) {
+    if (!ctx->enable) {
+      AudioScore_Init(&gAudioScore[1]);
+      AudioContext_SetScore(ctx, &gAudioScore[1]);
+      ctx->enable = true;
+    }
+  }
+
+  return err;
+}
+
+UError_t doRegionEvent(int32_t const x, int32_t const y, const void* eventArg, const HitEvent_t events[], size_t const numEvents) {
+  UError_t err = uSuccess;
+
+  if (uSuccess == err) {
+    if (NULL == events) {
+      err = uFailure;
+    }
+  }
+
+  if (uSuccess == err) {
+    for (size_t i = 0; i < numEvents; ++i) {
+      const int32_t x1 = events[i].hitbox.x;
+      const int32_t x2 = events[i].hitbox.x + events[i].hitbox.w;
+      const int32_t y1 = events[i].hitbox.y;
+      const int32_t y2 = events[i].hitbox.y + events[i].hitbox.h;
+
+      if (((x1 <= x) && (x2 > x)) && ((y1 <= y) && (y2 > y))) {
+        if (NULL != events[i].doEvent) {
+          err = events[i].doEvent(eventArg);
+        }
+        break;
+      }
+
+    }  // for(size_t i...
+  }
+
+  return err;
+}
+
+// 譜面処理 //////////////////////////////////////////////////////////////////////
+
+static void noteOffHandler(uint32_t tone, EGO_t* egos, NCO_t* ncos) {
+  if (NULL == egos || NULL == ncos) {
+    return;
+  }
+
+  EGO_NoteOff(&egos[0]);
+}
+
+static void noteOnHandler(uint32_t tone, EGO_t* egos, NCO_t* ncos) {
+  if (NULL == egos || NULL == ncos) {
+    return;
+  }
+
+  NCO_SetWeight(&ncos[0], tone);       // ベース
+  NCO_SetWeight(&ncos[1], tone >> 1);  // 1オクターブ下
+  NCO_SetWeight(&ncos[2], tone << 1);  // 1オクターブ上
+  // エンベロープを初期状態へ移行
+  EGO_NoteOn(&egos[0]);
+}
+
+static uint8_t outputHandler(EGO_t* egos, NCO_t* ncos) {
+  // オシレータの値を取得
+  const int32_t c0 = NCO_Get(&ncos[0]);   // キャリア0
+  const int32_t c1 = NCO_Get(&ncos[1]);   // キャリア1 (c0の1オクターブ下)
+  const int32_t op0 = NCO_Get(&ncos[2]);  // オペレータとして使用 (gNco[0] の 1オクターブ上)
+
+  // エンベロープジェネレータの値を取得
+  const int32_t env = EGO_Get(&egos[0]);
+
+  // キャリア0 と オペレータ, エンベロープから出力値を決定(=オペレータ変調あり)
+  const int32_t out0 = (((c0 * op0) >> 7) * env);  // -8323072 - +8323072
+  //const int32_t out0 = (c0 * env);  // -8323072 - +8323072
+
+  // キャリア1 とエンベロープから出力値を決定 (=オペレータ変調無し)
+  const int32_t out1 = (c1 * env);  // -8323072 - +8323072
+
+  // オペレータ0 とエンベロープから出力値を決定 (=オペレータ変調無し)
+  //const int32_t out2 = (op0 * env);  // -8323072 - +8323072
+
+  // ミキシング
+  const int32_t mux = ((out0 + out0 + out1 + out0) >> 2) >> 16;
+  //const int32_t mux = out0 >> 16;
+
+  // 0 - 255 (0x00 - 0xff) にクリップして出力
+  return 0xff & (128 + (int)(-127 > mux ? -127 : 127 < mux ? 127 : mux));
+}
+
+// 譜面処理 //////////////////////////////////////////////////////////////////////
+
 /**
  * @brief 通常状態を表現
  * @param app
@@ -291,15 +526,10 @@ static UError_t AppNormal_(AppObject_t* app, const AppArg_t* arg) {
       LCDDrv_SetBrightness(arg->hLCD, ((uint32_t)0xff * b) >> 7);
     }
 
-    if (arg->touch->points > 0 && !audio_act) {
-      // タッチ/クリックされている場合, 譜面再生開始
-      if (&gAudioScore[0] == gpCurAudioScore) {
-        gpCurAudioScore = &gAudioScore[1];
-      } else {
-        gpCurAudioScore = &gAudioScore[0];
-      }
-      AudioScore_Init(gpCurAudioScore);
-      audio_act = true;
+    if (arg->touch->points > 0) {
+      // タッチ位置に依存したイベント処理を実行
+      err = doRegionEvent(arg->touch->coords[0].x, arg->touch->coords[0].y, (const void*)&gAuidoContext, gRegionEvent,
+                          sizeof(gRegionEvent) / sizeof(gRegionEvent[0]));
     }
   }
 
@@ -311,55 +541,9 @@ static UError_t AppNormal_(AppObject_t* app, const AppArg_t* arg) {
     Slider_Render(&sliderP, arg->frame);
   }
 
-  // 譜面再生
-  if (uSuccess == err && true == audio_act) {
-    size_t remain = arg->audio_size;  // 出力残り
-
-    for (size_t i = 0; i < remain; ++i) {
-      if (AudioScore_IsFinished(gpCurAudioScore)) {
-        // 譜面終了
-        audio_act = false;
-      } else if (AudioScore_IsNoteChanged(gpCurAudioScore)) {
-        // 次の音符
-        AudioNote_t note;
-        AudioScore_GetNote(gpCurAudioScore, &note);
-        if (0u == note.tone) {
-          EGO_NoteOff(&gEgo[0]);
-        } else {
-          NCO_SetWeight(&gNco[0], note.tone);       // 原音
-          NCO_SetWeight(&gNco[1], note.tone >> 1);  // 1オクターブ下
-          NCO_SetWeight(&gNco[2], note.tone << 2);  // 2オクターブ上
-          EGO_NoteOn(&gEgo[0]);
-        }
-      } else {
-        ;
-      }
-
-      // 1サンプル分のサウンドデータ生成
-
-      // FMシンセっぽく
-
-      // -127 - 0 - + 127
-      const int32_t c0 = NCO_Get(&gNco[0]);   // キャリア0
-      const int32_t c1 = NCO_Get(&gNco[1]);   // キャリア1
-      const int32_t op0 = NCO_Get(&gNco[2]);  // オペレータとして使用 (gNco[0] の 2オクターブ上)
-
-      // エンベロープ 0 - 1 = 0 - 65536
-      const int32_t env = EGO_Get(&gEgo[0]);
-
-      // エンベロープとNCOを掛け合わせ, サンプル値を決定
-      const int32_t out0 = (((c0 * op0) >> 7) * env);  // -8323072 - +8323072
-      const int32_t out1 = (c1 * env);                 // -8323072 - +8323072
-
-      // ミキシング
-      const int32_t mux = ((out0 + out1 + out1 + out1) >> 2) >> 16;
-      // const int32_t mux = (((c0 * c2) >> 7) * env) >> 16;
-
-      // 0 - 255 (0x00 - 0xff) にクリップして出力
-      arg->audio_buff[i] = 0xff & (128 + (int)(-127 > mux ? -127 : 127 < mux ? 127 : mux));
-
-      AudioScore_Step(gpCurAudioScore);
-    }
+  if (uSuccess == err) {
+    // オーディオ出力 (譜面再生)
+    (void)AudioContext_Write(&gAuidoContext, arg->audio_buff, arg->audio_size);
   }
 
   // TODO: 遷移判定, 遷移

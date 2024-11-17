@@ -20,6 +20,7 @@ src/app/app.c
 src/audio/nco.c
 src/audio/ego.c
 src/audio/score.c
+src/audio/audiocontext.c
 )
 add_executable(app ${SRC})
 target_link_libraries(app pico_stdlib hardware_spi hardware_dma hardware_pwm hardware_i2c)
